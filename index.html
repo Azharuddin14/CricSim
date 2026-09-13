@@ -171,14 +171,23 @@
   .match-result-line { font-size: 12px; color: var(--cream-dim); padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
   .match-result-line b { color: var(--cream); }
   .player-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .scroll-list { max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; }
+  .scroll-list .player-list { margin-bottom: 0; }
   .player-count { font-size: 11px; color: var(--cream-dim); margin: 4px 0 10px; }
   .player-count-warning { color: var(--wicket); font-weight: 600; }
   .player-row {
     display: flex; align-items: center; justify-content: space-between;
     background: rgba(255,255,255,0.04); border: 1px solid var(--line);
-    border-radius: 6px; padding: 10px 12px; transition: background 0.15s;
+    border-radius: 6px; padding: 10px 12px; transition: background 0.15s; gap: 8px;
   }
   .player-row:hover { background: rgba(255,255,255,0.06); }
+  .reorder-btns { display: flex; flex-direction: column; gap: 2px; flex: 0 0 auto; }
+  .reorder-btn {
+    background: rgba(255,255,255,0.05); border: 1px solid var(--line); color: var(--pitch-light);
+    font-size: 10px; line-height: 1; padding: 4px 8px; border-radius: 4px; min-height: unset; cursor: pointer;
+  }
+  .reorder-btn:disabled { opacity: 0.25; cursor: default; }
+  .reorder-btn:not(:disabled):hover { border-color: var(--pitch-light); }
   .player-row-main { display: flex; flex-direction: column; gap: 2px; }
   .player-name { font-size: 13px; color: var(--cream); }
   .player-ratings { font-size: 11px; color: var(--cream-dim); }
@@ -341,7 +350,8 @@
         <h2>Player Database</h2>
         <button class="btn-primary" id="addPlayerBtn">+ Add player</button>
       </div>
-      <div id="playerDbList"></div>
+      <input type="text" id="playerSearchInput" placeholder="Search players by name…" style="margin-bottom:14px;" />
+      <div id="playerDbList" class="scroll-list"></div>
     </div>
   </div>
 
@@ -1122,12 +1132,24 @@ wireGroundSelect("tournamentGroundSelect", "tournament");
 // ============================================================
 function renderPlayerDb() {
   persistState();
+  renderPlayerDbList();
+}
+
+function renderPlayerDbList() {
   const list = document.getElementById("playerDbList");
+  const searchInput = document.getElementById("playerSearchInput");
+  const query = (searchInput.value || "").trim().toLowerCase();
+  const filtered = query ? appState.players.filter(p => p.name.toLowerCase().includes(query)) : appState.players;
+
   if (appState.players.length === 0) {
     list.innerHTML = `<p class="hint-text">No players yet — add some to get started.</p>`;
     return;
   }
-  const rows = appState.players.map(p => {
+  if (filtered.length === 0) {
+    list.innerHTML = `<p class="hint-text">No players match "${searchInput.value}".</p>`;
+    return;
+  }
+  const rows = filtered.map(p => {
     const team = playerTeam(p.id);
     return `
       <div class="player-row" data-player-id="${p.id}">
@@ -1145,6 +1167,7 @@ function renderPlayerDb() {
 }
 
 document.getElementById("addPlayerBtn").addEventListener("click", () => openPlayerModal(null));
+document.getElementById("playerSearchInput").addEventListener("input", () => renderPlayerDbList());
 
 function openPlayerModal(player) {
   const isNew = !player;
@@ -1248,10 +1271,14 @@ function renderTeamsTab() {
   }
   container.innerHTML = appState.teams.map(team => {
     const players = teamPlayers(team);
-    const rows = players.map(p => `
+    const rows = players.map((p, idx) => `
       <div class="player-row" data-player-id="${p.id}">
+        <div class="reorder-btns">
+          <button class="reorder-btn move-up-btn" data-team-id="${team.id}" data-idx="${idx}" ${idx === 0 ? "disabled" : ""}>▲</button>
+          <button class="reorder-btn move-down-btn" data-team-id="${team.id}" data-idx="${idx}" ${idx === players.length - 1 ? "disabled" : ""}>▼</button>
+        </div>
         <div class="player-row-main">
-          <span class="player-name">${p.name}</span>
+          <span class="player-name">${idx + 1}. ${p.name}</span>
           <span class="player-ratings mono">Bat ${p.batting} · Bowl ${p.bowling}</span>
         </div>
         <button class="remove-link" data-team-id="${team.id}" data-player-id="${p.id}">Remove</button>
@@ -1265,6 +1292,7 @@ function renderTeamsTab() {
           <input class="team-name-input" data-role="teamname" data-team-id="${team.id}" value="${team.name}" style="font-size:20px;" />
           <span class="team-roster-count ${players.length === 11 ? "" : "warn"}">${players.length}/11 players</span>
         </div>
+        <p class="hint-text">Use ▲▼ to set batting order — position 1 bats first.</p>
         <div class="player-list">${rows || '<p class="hint-text">No players assigned yet.</p>'}</div>
         <div class="add-to-team-row">
           <select data-role="addplayer" data-team-id="${team.id}" ${available.length === 0 ? "disabled" : ""}>
@@ -1281,6 +1309,22 @@ function renderTeamsTab() {
   });
   container.querySelectorAll('[data-role="teamname"]').forEach(input => {
     input.addEventListener("input", () => { getTeam(Number(input.dataset.teamId)).name = input.value; });
+  });
+  container.querySelectorAll(".move-up-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const team = getTeam(Number(btn.dataset.teamId));
+      const idx = Number(btn.dataset.idx);
+      if (idx > 0) [team.playerIds[idx - 1], team.playerIds[idx]] = [team.playerIds[idx], team.playerIds[idx - 1]];
+      renderTeamsTab();
+    });
+  });
+  container.querySelectorAll(".move-down-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const team = getTeam(Number(btn.dataset.teamId));
+      const idx = Number(btn.dataset.idx);
+      if (idx < team.playerIds.length - 1) [team.playerIds[idx + 1], team.playerIds[idx]] = [team.playerIds[idx], team.playerIds[idx + 1]];
+      renderTeamsTab();
+    });
   });
   container.querySelectorAll(".remove-link").forEach(btn => {
     btn.addEventListener("click", () => {
