@@ -85,8 +85,14 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
     // the premier batting skill — a genuine white-ball specialist, strong
     // across the board with no real trade-off, unlike the situational traits
     p[0] *= 0.88; p[1] *= 1.05; p[4] *= 1.15; p[6] *= 1.2; p.W *= 0.8;
-  } else if (batter.battingSkill === "Finisher" && deathPhase) {
-    p[4] *= 1.15; p[6] *= 1.35; p.W *= 1.1; p[0] *= 0.9;
+  } else if (batter.battingSkill === "Finisher") {
+    if (deathPhase) {
+      p[4] *= 1.15; p[6] *= 1.35; p.W *= 1.1; p[0] *= 0.9;
+    } else {
+      // not their moment yet — plays it safe, building the innings and
+      // saving the aggression for when it actually matters
+      p.W *= 0.85; p[4] *= 0.9; p[6] *= 0.85; p[0] *= 1.05;
+    }
   } else if (batter.battingSkill === "Pinch Hitter" && earlyPhase) {
     p[4] *= 1.2; p[6] *= 1.3; p.W *= 1.2; p[0] *= 0.85;
   }
