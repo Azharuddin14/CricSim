@@ -918,8 +918,20 @@ function renderFullBallByBall(timeline) {
     </details>`;
 }
 
-function renderBowlingTable(log) {
-  const rows = log.filter(b => b.overs > 0).map(b => {
+function renderBowlingTable(log, timeline) {
+  // real scorecards list bowlers in the order they came on to bowl, not
+  // roster order — find each bowler's first ball in the timeline to sort by
+  let ordered = log;
+  if (timeline && timeline.length) {
+    const firstAppearance = new Map();
+    timeline.forEach((b, i) => { if (!firstAppearance.has(b.bowlerName)) firstAppearance.set(b.bowlerName, i); });
+    ordered = [...log].sort((a, b) => {
+      const ai = firstAppearance.has(a.name) ? firstAppearance.get(a.name) : Infinity;
+      const bi = firstAppearance.has(b.name) ? firstAppearance.get(b.name) : Infinity;
+      return ai - bi;
+    });
+  }
+  const rows = ordered.filter(b => b.overs > 0).map(b => {
     const fullOvers = Math.floor(b.overs) + (b.overs % 1) * 10 / 6; // convert x.y over-notation to true decimal overs for economy math
     const economy = fullOvers > 0 ? (b.runs / fullOvers).toFixed(2) : "0.00";
     return `
@@ -1148,10 +1160,16 @@ function openPlayerModal(player) {
     <label>Bowling skill <select data-role="bowlskill">${BOWLING_SKILLS.map(s => `<option ${s===p.bowlingSkill?"selected":""}>${s}</option>`).join("")}</select></label>
     <label>Batting hand <select data-role="hand">${BATTING_HANDS.map(s => `<option ${s===p.battingHand?"selected":""}>${s}</option>`).join("")}</select></label>
     <label>Bowling style <select data-role="bowlstyle">${BOWLING_STYLES.map(s => `<option ${s===p.bowlingStyle?"selected":""}>${s}</option>`).join("")}</select></label>
-    <label style="flex-direction:row; align-items:center; gap:8px;">
-      <input type="checkbox" data-role="keeper" ${p.isWicketKeeper ? "checked" : ""} style="width:auto;" />
-      Wicketkeeper
-    </label>
+    <div style="display:flex; gap:16px;">
+      <label style="flex-direction:row; align-items:center; gap:8px;">
+        <input type="checkbox" data-role="keeper" ${p.isWicketKeeper ? "checked" : ""} style="width:auto;" />
+        Wicketkeeper
+      </label>
+      <label style="flex-direction:row; align-items:center; gap:8px;">
+        <input type="checkbox" data-role="purebatter" ${(!p.isWicketKeeper && p.bowlingStyle === "Does Not Bowl") ? "checked" : ""} style="width:auto;" />
+        Pure Batter
+      </label>
+    </div>
     <label data-role="keepingfield" style="${p.isWicketKeeper ? "" : "display:none;"}">Keeping rating <input type="number" data-role="keeping" value="${p.keeping != null ? p.keeping : 50}" min="0" max="100" /></label>
     <div class="modal-actions">
       <button type="button" class="btn-primary" id="savePlayerBtn">${isNew ? "Add player" : "Save changes"}</button>
@@ -1163,28 +1181,35 @@ function openPlayerModal(player) {
   document.getElementById("cancelPlayerBtn").addEventListener("click", () => { modal.style.display = "none"; });
 
   const keeperCheckbox = form.querySelector('[data-role="keeper"]');
+  const pureBatterCheckbox = form.querySelector('[data-role="purebatter"]');
   const styleSelect = form.querySelector('[data-role="bowlstyle"]');
   const keepingField = form.querySelector('[data-role="keepingfield"]');
   function applyKeeperConstraint() {
-    if (keeperCheckbox.checked) {
+    const locked = keeperCheckbox.checked || pureBatterCheckbox.checked;
+    if (locked) {
       styleSelect.value = "Does Not Bowl";
       styleSelect.disabled = true;
-      keepingField.style.display = "";
     } else {
       styleSelect.disabled = false;
-      keepingField.style.display = "none";
     }
+    keepingField.style.display = keeperCheckbox.checked ? "" : "none";
+    // a wicketkeeper is already a non-bowler by definition — keep the two
+    // checkboxes from fighting each other over the same lock
+    if (keeperCheckbox.checked) { pureBatterCheckbox.checked = false; pureBatterCheckbox.disabled = true; }
+    else { pureBatterCheckbox.disabled = false; }
   }
   keeperCheckbox.addEventListener("change", applyKeeperConstraint);
-  applyKeeperConstraint(); // in case this player was already saved as a keeper
+  pureBatterCheckbox.addEventListener("change", applyKeeperConstraint);
+  applyKeeperConstraint(); // in case this player was already saved as a keeper or pure batter
 
   document.getElementById("savePlayerBtn").addEventListener("click", () => {
     const get = role => form.querySelector(`[data-role="${role}"]`).value;
     const isWicketKeeper = keeperCheckbox.checked;
+    const isPureBatter = pureBatterCheckbox.checked;
     const updated = {
       name: get("name") || "Player", batting: Number(get("bat")) || 0, bowling: Number(get("bowl")) || 0,
       battingSkill: get("batskill"), bowlingSkill: get("bowlskill"), battingHand: get("hand"),
-      bowlingStyle: isWicketKeeper ? "Does Not Bowl" : get("bowlstyle"), // enforced: a keeper never bowls
+      bowlingStyle: (isWicketKeeper || isPureBatter) ? "Does Not Bowl" : get("bowlstyle"), // enforced: neither ever bowls
       isWicketKeeper, keeping: Number(get("keeping")) || 0,
     };
     if (isNew) {
@@ -1959,7 +1984,7 @@ function playBackMatch(result, teamColors) {
       ${renderExtras(inningsData.extras, inningsData.extrasByType)}
       <div class="sc-total-row" style="background:${battingColor};">TOTAL (${formatOvers(inningsData.oversUsed)} ov) — <b>${inningsData.scoreText}</b></div>
       <div class="sc-banner" style="background:${bowlingColor};">${bowlingTeamName} BOWLING</div>
-      ${renderBowlingTable(bowlingLog)}
+      ${renderBowlingTable(bowlingLog, inningsData.timeline)}
       ${renderFallOfWickets(inningsData.fallOfWickets)}
       ${renderFullBallByBall(inningsData.timeline)}
     `;
