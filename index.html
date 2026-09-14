@@ -503,7 +503,7 @@ function normalize(p) {
   return out;
 }
 
-function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced, battingDayFactor }) {
+function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced, battingDayFactor, partner }) {
   let p = { ...BASE_PROBS };
   const skillDiff = (batter.batting - bowler.bowling) / 65;
   p.W *= clamp(1 - skillDiff * 0.6, 0.4, 1.7);
@@ -574,6 +574,16 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   if (runRateNeeded != null && currentRunRate != null && runRateNeeded > currentRunRate * 1.4) {
     p[4] *= 1.25; p[6] *= 1.4; p.W *= 1.25; p[0] *= 0.8;
   }
+  if (partner) {
+    const partnerAggressive = partner.battingSkill === "Compulsive Slogger" || partner.battingSkill === "Pinch Hitter";
+    const partnerAnchor = partner.battingSkill === "Specialist Batsman";
+    const partnerSR = partner.balls >= 6 ? (partner.runs / partner.balls) * 100 : null;
+    let lean = 0;
+    if (partnerAggressive || (partnerSR != null && partnerSR >= 145)) lean = 1;
+    else if (partnerAnchor || (partnerSR != null && partnerSR <= 85)) lean = -1;
+    if (lean === 1) { p.W *= 0.93; p[4] *= 0.93; p[6] *= 0.9; p[0] *= 1.05; p[1] *= 1.05; }
+    else if (lean === -1) { p.W *= 1.05; p[4] *= 1.08; p[6] *= 1.1; p[0] *= 0.95; }
+  }
   if (battingDayFactor != null) {
     const f = battingDayFactor;
     p[4] *= clamp(1 + (f - 1) * 1.2, 0.55, 1.9);
@@ -634,7 +644,7 @@ function getEligibleBowlers(bowlingTeam, totalOvers) {
 }
 
 /** Pure weighted pick from a candidate pool — rating plus phase/style fit. */
-function pickWeightedBowler(candidates, over, totalOvers) {
+function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns) {
   const earlyPhase = over < totalOvers * 0.3;
   const deathPhase = over >= totalOvers - 4;
   const middlePhase = !earlyPhase && !deathPhase;
@@ -648,6 +658,12 @@ function pickWeightedBowler(candidates, over, totalOvers) {
     if (b.bowlingSkill === "Specialist Bowler") w *= 1.6;
     if (b.bowlingSkill === "New Ball Bowler" && earlyPhase) w *= 1.5;
     if (b.bowlingSkill === "Death/Old Ball Bowler" && deathPhase) w *= 1.5;
+    if (b.bowlingSkill === "Death/Old Ball Bowler" && !deathPhase) w *= 0.18;
+    if (lastOverRuns && lastOverRuns.has(b)) {
+      const runs = lastOverRuns.get(b);
+      if (runs >= 14) w *= 0.35;
+      else if (runs >= 10) w *= 0.6;
+    }
     return w;
   });
   const totalWeight = weights.reduce((a, b) => a + b, 0);
@@ -663,7 +679,7 @@ function pickWeightedBowler(candidates, over, totalOvers) {
  * the middle overs, pace returns at the death — but whoever bowled the
  * previous over is always excluded first, before any type preference,
  * so the same bowler can never go two overs in a row. */
-function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler }) {
+function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns }) {
   const maxOversPerBowler = Math.max(1, Math.ceil(totalOvers / 5));
   const capped = b => (oversBowledMap.get(b) || 0) >= maxOversPerBowler;
   const isPowerplay = over < Math.min(4, totalOvers);
@@ -690,7 +706,7 @@ function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, power
     const pacePool = eligible.filter(isPaceStyle);
     const preferred = pacePool.length > 0 ? pacePool : eligible;
     const pool = buildPool(preferred, b => !powerplayUsed.has(b));
-    const bowler = pickWeightedBowler(pool, over, totalOvers);
+    const bowler = pickWeightedBowler(pool, over, totalOvers, lastOverRuns);
     powerplayUsed.add(bowler);
     return { bowler };
   }
@@ -702,7 +718,7 @@ function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, power
   let pool = eligible.filter(b => !capped(b) && b !== lastOverBowler);
   if (pool.length === 0) pool = eligible.filter(b => !capped(b));
   if (pool.length === 0) pool = eligible;
-  const bowler = pickWeightedBowler(pool, over, totalOvers);
+  const bowler = pickWeightedBowler(pool, over, totalOvers, lastOverRuns);
   return { bowler };
 }
 
@@ -723,13 +739,14 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
   const bowlerFullOvers = new Map();
   const powerplayUsed = new Set();
   let lastOverBowler = null;
+  const lastOverRuns = new Map();
 
   const WIDE_CHANCE = 0.038;
   const NOBALL_CHANCE = 0.011;
   const BYE_CHANCE = 0.02;
 
   for (let over = 0; over < totalOvers && wickets < 10 && strikerIdx < battingTeam.length && (target == null || runs < target); over++) {
-    const choice = chooseBowlerForOver({ eligible, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler });
+    const choice = chooseBowlerForOver({ eligible, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns });
     const bowler = choice.bowler;
     const bowlerLog = bowlingLog[bowlingTeam.indexOf(bowler)];
     if (!bowlerBallsSelf.has(bowler)) bowlerBallsSelf.set(bowler, 0);
@@ -753,7 +770,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
       }
       if (extraRoll < effectiveWideChance + NOBALL_CHANCE) {
         runs += 1; extras += 1; extrasByType.noball += 1; bowlerLog.runs += 1; runsThisOver += 1;
-        const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls, battingDayFactor });
+        const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls, battingDayFactor, partner: battingTeam[nonStrikerIdx] ? { battingSkill: battingTeam[nonStrikerIdx].battingSkill, runs: battingLog[nonStrikerIdx].runs, balls: battingLog[nonStrikerIdx].balls } : null });
         let bonusOutcome = pickOutcome(probs);
         if (bonusOutcome === "W") bonusOutcome = 0;
         runs += bonusOutcome; batterLog.runs += bonusOutcome; bowlerLog.runs += bonusOutcome; runsThisOver += bonusOutcome;
@@ -770,7 +787,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
       const selfBalls = bowlerBallsSelf.get(bowler);
       bowlerLog.overs = Math.floor(selfBalls / 6) + (selfBalls % 6) / 10;
 
-      const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls - 1, battingDayFactor });
+      const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls - 1, battingDayFactor, partner: battingTeam[nonStrikerIdx] ? { battingSkill: battingTeam[nonStrikerIdx].battingSkill, runs: battingLog[nonStrikerIdx].runs, balls: battingLog[nonStrikerIdx].balls } : null });
       let outcome = pickOutcome(probs);
       const wasFreeHit = freeHit;
       freeHit = false;
@@ -832,6 +849,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
     bowlerFullOvers.set(bowler, fullOversNow);
     if (runsThisOver === 0 && legalBalls === 6) bowlerLog.maidens += 1;
     lastOverBowler = bowler;
+    lastOverRuns.set(bowler, runsThisOver);
     if (legalBalls === 6) {
       const strikerLog = battingLog[strikerIdx];
       const nonStrikerLog = battingLog[nonStrikerIdx];

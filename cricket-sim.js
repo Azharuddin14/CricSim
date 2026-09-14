@@ -81,7 +81,7 @@ function normalize(p) {
  * This is the core "rating model" — every multiplier here is a
  * deliberate, documented design choice, not extracted from anywhere.
  */
-function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced, battingDayFactor }) {
+function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced, battingDayFactor, partner }) {
   let p = { ...BASE_PROBS };
 
   // 1. Skill differential: batting rating vs bowling rating, -1..1
@@ -197,7 +197,27 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
     p[4] *= 1.25; p[6] *= 1.4; p.W *= 1.25; p[0] *= 0.8;
   }
 
-  // 7. Per-innings "day factor" — some days a lineup just clicks, other
+  // 7. Partnership dynamics — if the partner at the other end is already
+  // scoring quickly (or built for aggression), this batter leans toward
+  // anchoring; if the partner is quiet (or built to anchor), this batter
+  // leans toward keeping the rate ticking instead. A modest complement to
+  // personal skill, not a dominant factor — matches how real batting
+  // orders naturally split into one settled, one accelerating.
+  if (partner) {
+    const partnerAggressive = partner.battingSkill === "Compulsive Slogger" || partner.battingSkill === "Pinch Hitter";
+    const partnerAnchor = partner.battingSkill === "Specialist Batsman";
+    const partnerSR = partner.balls >= 6 ? (partner.runs / partner.balls) * 100 : null;
+    let lean = 0; // +1 = this batter anchors more, -1 = this batter accelerates more
+    if (partnerAggressive || (partnerSR != null && partnerSR >= 145)) lean = 1;
+    else if (partnerAnchor || (partnerSR != null && partnerSR <= 85)) lean = -1;
+    if (lean === 1) {
+      p.W *= 0.93; p[4] *= 0.93; p[6] *= 0.9; p[0] *= 1.05; p[1] *= 1.05;
+    } else if (lean === -1) {
+      p.W *= 1.05; p[4] *= 1.08; p[6] *= 1.1; p[0] *= 0.95;
+    }
+  }
+
+  // 8. Per-innings "day factor" — some days a lineup just clicks, other
   // days nothing comes off the bat. Applied last, after every situational
   // adjustment, so it scales the whole ball outcome rather than fighting
   // with any one factor above.
@@ -249,7 +269,7 @@ function pickDismissal(bowler, hasKeeper) {
 /** Pure weighted pick from a candidate pool — rating plus phase/style fit
  * (seamers early and at the death, spin through the middle), with a named
  * skill stacking an extra boost on top. */
-function pickWeightedBowler(candidates, over, totalOvers) {
+function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns) {
   const earlyPhase = over < totalOvers * 0.3;
   const deathPhase = over >= totalOvers - 4;
   const middlePhase = !earlyPhase && !deathPhase;
@@ -266,6 +286,18 @@ function pickWeightedBowler(candidates, over, totalOvers) {
     if (b.bowlingSkill === "Specialist Bowler") w *= 1.6; // a genuine frontline threat, bowled more in every phase
     if (b.bowlingSkill === "New Ball Bowler" && earlyPhase) w *= 1.5;
     if (b.bowlingSkill === "Death/Old Ball Bowler" && deathPhase) w *= 1.5;
+    // a genuine death specialist gets held back outside the death overs —
+    // a captain saves their closer rather than burning them at over 9
+    if (b.bowlingSkill === "Death/Old Ball Bowler" && !deathPhase) w *= 0.18;
+    // a bowler who was smashed recently gets a cooling-off period — this
+    // persists beyond their immediate spell, unlike the spell-continuation
+    // check, matching a captain's real reluctance to bring someone straight
+    // back after conceding heavily
+    if (lastOverRuns && lastOverRuns.has(b)) {
+      const runs = lastOverRuns.get(b);
+      if (runs >= 14) w *= 0.35;
+      else if (runs >= 10) w *= 0.6;
+    }
     return w;
   });
   const totalWeight = weights.reduce((a, b) => a + b, 0);
@@ -283,7 +315,7 @@ function pickWeightedBowler(candidates, over, totalOvers) {
  * previous over is always excluded first, before any type preference,
  * so the same bowler can never go two overs in a row.
  */
-function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler }) {
+function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns }) {
   const capped = b => (oversBowledMap.get(b) || 0) >= Math.max(1, Math.ceil(totalOvers / 5));
   const isPowerplay = over < Math.min(4, totalOvers);
   const isPaceStyle = b => b.bowlingStyle !== "None" && b.bowlingStyle !== "Does Not Bowl" && !isSpin(b.bowlingStyle);
@@ -318,7 +350,7 @@ function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, power
     const pacePool = eligible.filter(isPaceStyle);
     const preferred = pacePool.length > 0 ? pacePool : eligible;
     const pool = buildPool(preferred, b => !powerplayUsed.has(b));
-    const bowler = pickWeightedBowler(pool, over, totalOvers);
+    const bowler = pickWeightedBowler(pool, over, totalOvers, lastOverRuns);
     powerplayUsed.add(bowler);
     return { bowler };
   }
@@ -331,7 +363,7 @@ function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, power
   let pool = eligible.filter(b => !capped(b) && b !== lastOverBowler);
   if (pool.length === 0) pool = eligible.filter(b => !capped(b));
   if (pool.length === 0) pool = eligible;
-  const bowler = pickWeightedBowler(pool, over, totalOvers);
+  const bowler = pickWeightedBowler(pool, over, totalOvers, lastOverRuns);
   return { bowler };
 }
 
@@ -373,13 +405,14 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
   const bowlerFullOvers = new Map();
   const powerplayUsed = new Set();
   let lastOverBowler = null;
+  const lastOverRuns = new Map();
 
   const WIDE_CHANCE = 0.038;
   const NOBALL_CHANCE = 0.011;
   const BYE_CHANCE = 0.02; // only rolled when the underlying delivery would otherwise be a dot
 
   for (let over = 0; over < totalOvers && wickets < 10 && strikerIdx < battingTeam.length && (target == null || runs < target); over++) {
-    const choice = chooseBowlerForOver({ eligible, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler });
+    const choice = chooseBowlerForOver({ eligible, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns });
     const bowler = choice.bowler;
     const bowlerLog = bowlingLog[bowlingTeam.indexOf(bowler)];
     if (!bowlerBallsSelf.has(bowler)) bowlerBallsSelf.set(bowler, 0);
@@ -414,6 +447,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
         const probs = getBallProbabilities({
           batter, bowler, pitch, over, totalOvers,
           wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls, battingDayFactor,
+          partner: battingTeam[nonStrikerIdx] ? { battingSkill: battingTeam[nonStrikerIdx].battingSkill, runs: battingLog[nonStrikerIdx].runs, balls: battingLog[nonStrikerIdx].balls } : null,
         });
         let bonusOutcome = pickOutcome(probs);
         if (bonusOutcome === "W") bonusOutcome = 0; // no conventional dismissal off a no-ball
@@ -439,6 +473,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
       const probs = getBallProbabilities({
         batter, bowler, pitch, over, totalOvers,
         wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls - 1, battingDayFactor,
+        partner: battingTeam[nonStrikerIdx] ? { battingSkill: battingTeam[nonStrikerIdx].battingSkill, runs: battingLog[nonStrikerIdx].runs, balls: battingLog[nonStrikerIdx].balls } : null,
       });
       let outcome = pickOutcome(probs);
       const wasFreeHit = freeHit;
@@ -504,6 +539,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
     bowlerFullOvers.set(bowler, fullOversNow);
     if (runsThisOver === 0 && legalBalls === 6) bowlerLog.maidens += 1;
     lastOverBowler = bowler;
+    lastOverRuns.set(bowler, runsThisOver);
     if (legalBalls === 6) {
       // over completed normally — record a running-score summary: team
       // score, both batters at the crease, and this bowler's figures
