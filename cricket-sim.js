@@ -333,6 +333,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
   const bowlingLog = bowlingTeam.map(p => ({ name: p.name, overs: 0, runs: 0, wickets: 0, maidens: 0 }));
   const fallOfWickets = [];
   const timeline = [];
+  const oversSummary = [];
   let extras = 0;
   const extrasByType = { wide: 0, noball: 0, bye: 0 };
 
@@ -473,12 +474,27 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
     bowlerFullOvers.set(bowler, fullOversNow);
     if (runsThisOver === 0 && legalBalls === 6) bowlerLog.maidens += 1;
     lastOverBowler = bowler;
+    if (legalBalls === 6) {
+      // over completed normally — record a running-score summary: team
+      // score, both batters at the crease, and this bowler's figures
+      // through this over. Kept in a separate array from `timeline` so it
+      // never gets mistaken for an individual ball by anything that walks
+      // the ball-by-ball ball array (e.g. the live playback animation).
+      const strikerLog = battingLog[strikerIdx];
+      const nonStrikerLog = battingLog[nonStrikerIdx];
+      oversSummary.push({
+        over: over + 1, score: runs, wickets,
+        batter1: strikerLog ? { name: strikerLog.name, runs: strikerLog.runs, balls: strikerLog.balls, out: strikerLog.out } : null,
+        batter2: nonStrikerLog ? { name: nonStrikerLog.name, runs: nonStrikerLog.runs, balls: nonStrikerLog.balls, out: nonStrikerLog.out } : null,
+        bowlerFigures: { name: bowler.name, overs: bowlerLog.overs, runs: bowlerLog.runs, wickets: bowlerLog.wickets },
+      });
+    }
     // swap ends between overs (standard cricket behaviour)
     const t = strikerIdx; strikerIdx = nonStrikerIdx; nonStrikerIdx = t;
   }
 
   const oversUsed = Math.min(totalOvers, Math.floor(ballsBowled / 6) + (ballsBowled % 6) / 10);
-  return { runs, wickets, oversUsed, battingLog, bowlingLog, fallOfWickets, timeline, extras, extrasByType };
+  return { runs, wickets, oversUsed, battingLog, bowlingLog, fallOfWickets, timeline, extras, extrasByType, oversSummary };
 }
 
 function formatBallCommentary({ isWicket, mode, runs, batterName, bowlerName, fielder }) {

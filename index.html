@@ -307,6 +307,10 @@
   .bbb-details summary { cursor: pointer; font-size: 12px; color: var(--pitch-light); font-weight: 600; }
   .bbb-list { max-height: 260px; overflow-y: auto; margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cream-dim); border-top: 1px solid var(--line); padding-top: 8px; }
   .bbb-line { padding: 2px 0; }
+  .bbb-over-summary {
+    padding: 6px 8px; margin: 4px 0 8px; background: rgba(242,193,78,0.08);
+    border-left: 2px solid var(--amber); color: var(--cream); font-weight: 600;
+  }
 
   .toss-line { text-align: center; font-size: 13px; color: var(--cream-dim); margin-bottom: 16px; font-style: italic; }
   .live-scoreboard { background: var(--panel); border: 1px solid var(--line); border-radius: 6px 6px 0 0; padding: 16px 20px; text-align: center; }
@@ -318,6 +322,7 @@
     font-family: 'JetBrains Mono', monospace; font-size: 12px; margin-bottom: 24px;
   }
   .ball-line { padding: 3px 0; color: var(--cream-dim); }
+  .ball-line.over-end-line { color: var(--amber); font-weight: 600; border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 2px; }
   .ball-line.highlight { color: var(--amber); font-weight: 600; }
   .fow .label { color: var(--amber); font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; display: block; margin-bottom: 4px; }
   .notout-tag { color: var(--pitch-light); font-size: 10px; }
@@ -693,6 +698,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
   const bowlingLog = bowlingTeam.map(p => ({ name: p.name, overs: 0, runs: 0, wickets: 0, maidens: 0 }));
   const fallOfWickets = [];
   const timeline = [];
+  const oversSummary = [];
   let extras = 0;
   const extrasByType = { wide: 0, noball: 0, bye: 0 };
   const { eligible, maxOversPerBowler } = getEligibleBowlers(bowlingTeam, totalOvers);
@@ -810,10 +816,20 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
     bowlerFullOvers.set(bowler, fullOversNow);
     if (runsThisOver === 0 && legalBalls === 6) bowlerLog.maidens += 1;
     lastOverBowler = bowler;
+    if (legalBalls === 6) {
+      const strikerLog = battingLog[strikerIdx];
+      const nonStrikerLog = battingLog[nonStrikerIdx];
+      oversSummary.push({
+        over: over + 1, score: runs, wickets,
+        batter1: strikerLog ? { name: strikerLog.name, runs: strikerLog.runs, balls: strikerLog.balls, out: strikerLog.out } : null,
+        batter2: nonStrikerLog ? { name: nonStrikerLog.name, runs: nonStrikerLog.runs, balls: nonStrikerLog.balls, out: nonStrikerLog.out } : null,
+        bowlerFigures: { name: bowler.name, overs: bowlerLog.overs, runs: bowlerLog.runs, wickets: bowlerLog.wickets },
+      });
+    }
     const t = strikerIdx; strikerIdx = nonStrikerIdx; nonStrikerIdx = t;
   }
   const oversUsed = Math.min(totalOvers, Math.floor(ballsBowled / 6) + (ballsBowled % 6) / 10);
-  return { runs, wickets, oversUsed, battingLog, bowlingLog, fallOfWickets, timeline, extras, extrasByType };
+  return { runs, wickets, oversUsed, battingLog, bowlingLog, fallOfWickets, timeline, extras, extrasByType, oversSummary };
 }
 
 function formatOvers(o) {
@@ -928,9 +944,26 @@ function renderExtras(extras, extrasByType) {
   return `<div class="fow"><span class="label">Extras</span>${extras} (b ${extrasByType.bye}, wd ${extrasByType.wide}, nb ${extrasByType.noball})</div>`;
 }
 
-function renderFullBallByBall(timeline) {
+function renderOverSummaryLine(s) {
+  if (!s) return "";
+  const b1 = s.batter1 ? `${s.batter1.name} ${s.batter1.runs}${s.batter1.out ? "" : "*"}(${s.batter1.balls})` : "";
+  const b2 = s.batter2 ? `${s.batter2.name} ${s.batter2.runs}${s.batter2.out ? "" : "*"}(${s.batter2.balls})` : "";
+  const bf = s.bowlerFigures;
+  return `<div class="bbb-over-summary">End of over ${s.over}: ${s.score}/${s.wickets} — ${b1}, ${b2} · ${bf.name} ${formatOvers(bf.overs)}-${bf.runs}-${bf.wickets}</div>`;
+}
+
+function renderFullBallByBall(timeline, oversSummary) {
   if (!timeline || timeline.length === 0) return "";
-  const rows = timeline.map(b => `<div class="bbb-line">${b.over}.${b.ball} — ${b.commentary}</div>`).join("");
+  const summaryByOver = new Map((oversSummary || []).map(s => [s.over, s]));
+  const rows = timeline.map((b, i) => {
+    let html = `<div class="bbb-line">${b.over}.${b.ball} — ${b.commentary}</div>`;
+    const next = timeline[i + 1];
+    const isLastOfOver = !next || next.over !== b.over; // robust to extras sharing the same displayed ball number
+    if (isLastOfOver && summaryByOver.has(b.over)) {
+      html += renderOverSummaryLine(summaryByOver.get(b.over));
+    }
+    return html;
+  }).join("");
   return `
     <details class="bbb-details" open>
       <summary>Full ball-by-ball (${timeline.length} balls)</summary>
@@ -1995,8 +2028,8 @@ function playBackMatch(result, teamColors) {
   const colors = teamColors || { firstTeamColor: "#E63946", secondTeamColor: "#1D3557" };
 
   const innings = [
-    { label: `${result.firstTeamName} batting`, timeline: result.first.timeline, totalOvers: result.first.oversUsed },
-    { label: `${result.secondTeamName} batting`, timeline: result.second.timeline, totalOvers: result.second.oversUsed },
+    { label: `${result.firstTeamName} batting`, timeline: result.first.timeline, oversSummary: result.first.oversSummary, totalOvers: result.first.oversUsed },
+    { label: `${result.secondTeamName} batting`, timeline: result.second.timeline, oversSummary: result.second.oversSummary, totalOvers: result.second.oversUsed },
   ];
 
   let inningsIdx = 0, ballIdx = 0;
@@ -2024,6 +2057,20 @@ function playBackMatch(result, teamColors) {
     line.className = "ball-line" + (b.commentary.includes("!") ? " highlight" : "");
     line.textContent = `${b.over}.${b.ball}  ${b.commentary}`;
     feed.prepend(line);
+    const next = inn.timeline[ballIdx + 1];
+    const isLastOfOver = !next || next.over !== b.over;
+    if (isLastOfOver) {
+      const summary = (inn.oversSummary || []).find(s => s.over === b.over);
+      if (summary) {
+        const summaryLine = document.createElement("div");
+        summaryLine.className = "ball-line over-end-line";
+        const b1 = summary.batter1 ? `${summary.batter1.name} ${summary.batter1.runs}${summary.batter1.out ? "" : "*"}(${summary.batter1.balls})` : "";
+        const b2 = summary.batter2 ? `${summary.batter2.name} ${summary.batter2.runs}${summary.batter2.out ? "" : "*"}(${summary.batter2.balls})` : "";
+        const bf = summary.bowlerFigures;
+        summaryLine.textContent = `End of over ${summary.over}: ${summary.score}/${summary.wickets} — ${b1}, ${b2} · ${bf.name} ${formatOvers(bf.overs)}-${bf.runs}-${bf.wickets}`;
+        feed.prepend(summaryLine);
+      }
+    }
     while (feed.children.length > 12) feed.removeChild(feed.lastChild);
     ballIdx++;
     setTimeout(step, MS_PER_BALL);
@@ -2040,7 +2087,7 @@ function playBackMatch(result, teamColors) {
       <div class="sc-banner" style="background:${bowlingColor};">${bowlingTeamName} BOWLING</div>
       ${renderBowlingTable(bowlingLog, inningsData.timeline)}
       ${renderFallOfWickets(inningsData.fallOfWickets)}
-      ${renderFullBallByBall(inningsData.timeline)}
+      ${renderFullBallByBall(inningsData.timeline, inningsData.oversSummary)}
     `;
   }
 
