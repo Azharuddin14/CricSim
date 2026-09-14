@@ -91,25 +91,27 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   p[6] *= clamp(1 + skillDiff * 0.6, 0.4, 2.1);
   p[0] *= clamp(1 - skillDiff * 0.3, 0.55, 1.45);
 
-  // 2. Batting special skills
+  // 2. Batting special skills — deviations from baseline amplified ~1.35x
+  // so a named skill actually feels like a real, noticeable trait rather
+  // than a marginal nudge.
   const earlyPhase = over < totalOvers * 0.3;
   const deathPhase = over >= totalOvers - 4;
   if (batter.battingSkill === "Compulsive Slogger") {
     // mishits off the middle still often beat the field for a single —
     // this is a low-percentage, high-reward slogger, not a total gambler
-    p[4] *= 1.2; p[6] *= 1.45; p.W *= 1.25; p[0] *= 0.85; p[1] *= 1.1;
+    p[4] *= 1.27; p[6] *= 1.61; p.W *= 1.34; p[0] *= 0.80; p[1] *= 1.14;
   } else if (batter.battingSkill === "Specialist Batsman") {
     // the premier batting skill — a genuine white-ball specialist, strong
     // across the board with no real trade-off, unlike the situational traits
-    p[0] *= 0.88; p[1] *= 1.05; p[4] *= 1.15; p[6] *= 1.2; p.W *= 0.8;
+    p[0] *= 0.84; p[1] *= 1.07; p[4] *= 1.20; p[6] *= 1.27; p.W *= 0.73;
   } else if (batter.battingSkill === "Finisher") {
     if (deathPhase) {
-      p[4] *= 1.15; p[6] *= 1.35; p.W *= 1.1; p[0] *= 0.9;
+      p[4] *= 1.20; p[6] *= 1.47; p.W *= 1.14; p[0] *= 0.87;
     } else {
       // not their moment yet — actively anchors the innings, rotating
       // strike with 1s and 2s rather than just playing risk-free dots,
       // saving the real aggression for when it actually matters
-      p.W *= 0.85; p[4] *= 0.9; p[6] *= 0.85; p[0] *= 1.02; p[1] *= 1.1; p[2] *= 1.1;
+      p.W *= 0.80; p[4] *= 0.87; p[6] *= 0.80; p[0] *= 1.03; p[1] *= 1.14; p[2] *= 1.14;
     }
   } else if (batter.battingSkill === "Pinch Hitter") {
     // a lower-order basher, not a powerplay-promotion tactic — real examples
@@ -117,35 +119,35 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
     // not the powerplay, so this is always-on rather than phase-gated.
     // Deliberately more boom-or-bust than Compulsive Slogger — "very
     // inconsistent" — higher wicket risk for a similar boundary payoff.
-    p[4] *= 1.2; p[6] *= 1.4; p.W *= 1.4; p[0] *= 0.82;
+    p[4] *= 1.27; p[6] *= 1.54; p.W *= 1.54; p[0] *= 0.76;
   }
 
-  // 3. Bowling special skills
+  // 3. Bowling special skills — same amplification applied
   if (bowler.bowlingSkill === "Specialist Bowler") {
     // the premier bowling skill — a genuine white-ball specialist, strong
     // across the board with no real trade-off
-    p.W *= 1.25; p[0] *= 1.1; p[4] *= 0.88; p[6] *= 0.85;
+    p.W *= 1.34; p[0] *= 1.14; p[4] *= 0.84; p[6] *= 0.80;
   } else if (bowler.bowlingSkill === "New Ball Bowler") {
     if (earlyPhase) {
-      p[0] *= 1.15; p.W *= 1.2; p[4] *= 0.85; p[6] *= 0.8;
+      p[0] *= 1.20; p.W *= 1.27; p[4] *= 0.80; p[6] *= 0.73;
     } else if (deathPhase) {
       // out of their specialty this late — no fresh-ball swing left to lean on
-      p[4] *= 1.12; p[6] *= 1.15; p.W *= 0.9;
+      p[4] *= 1.16; p[6] *= 1.20; p.W *= 0.87;
     }
   } else if (bowler.bowlingSkill === "Death/Old Ball Bowler") {
     if (deathPhase) {
-      p[4] *= 0.8; p[6] *= 0.75; p.W *= 1.2; p[0] *= 1.1;
+      p[4] *= 0.73; p[6] *= 0.66; p.W *= 1.27; p[0] *= 1.14;
     } else if (earlyPhase) {
       // no fresh-ball movement to exploit this early — their tricks are built for later
-      p[4] *= 1.1; p[6] *= 1.1; p.W *= 0.9;
+      p[4] *= 1.14; p[6] *= 1.14; p.W *= 0.87;
     }
   } else if (bowler.bowlingSkill === "Mystery Spinner" && isSpin(bowler.bowlingStyle)) {
     if (deathPhase) {
       // if a batter's picked the variation, there's no fallback plan —
       // the trick either lands or it gets punished
-      p.W *= 1.05; p[6] *= 1.3; p[4] *= 1.15; p[0] *= 0.9;
+      p.W *= 1.07; p[6] *= 1.41; p[4] *= 1.20; p[0] *= 0.87;
     } else {
-      p.W *= 1.2; p[6] *= 1.1; p[0] *= 1.05; p[4] *= 0.95;
+      p.W *= 1.27; p[6] *= 1.14; p[0] *= 1.07; p[4] *= 0.93;
     }
   }
 
