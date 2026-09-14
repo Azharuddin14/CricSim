@@ -51,6 +51,21 @@ const DISMISSAL_MODES = ["Bowled", "Caught", "LBW", "Stumped", "Run Out"];
 const BOWLING_ELIGIBLE_MIN = 25;
 
 function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+/**
+ * Rolls a per-innings "day factor" for the batting side — real cricket
+ * (and any well-tuned simulator) has more variance than pure ball-by-ball
+ * independence produces: some days a batting lineup just clicks and every
+ * mishit finds a gap, other days nothing comes off the bat. This is a
+ * mixture distribution (not a flat uniform spread) so genuinely exceptional
+ * or genuinely poor days are rarer than ordinary ones, but they do happen.
+ */
+function rollBattingDayFactor() {
+  const r = Math.random();
+  if (r < 0.08) return 1.15 + Math.random() * 0.18; // hot day, ~8% chance: 1.15-1.33
+  if (r < 0.16) return 0.68 + Math.random() * 0.17; // cold day, ~8% chance: 0.68-0.85
+  return 0.90 + Math.random() * 0.20; // ordinary day, ~84% chance: 0.90-1.10
+}
 const SPIN_STYLE_NAMES = ["Right Arm Off Break", "Slow Left Arm Orthodox", "Right Arm Leg Spin", "Left Arm Chinaman"];
 function isSpin(style) { return SPIN_STYLE_NAMES.includes(style); }
 
@@ -66,7 +81,7 @@ function normalize(p) {
  * This is the core "rating model" — every multiplier here is a
  * deliberate, documented design choice, not extracted from anywhere.
  */
-function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced }) {
+function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced, battingDayFactor }) {
   let p = { ...BASE_PROBS };
 
   // 1. Skill differential: batting rating vs bowling rating, -1..1
@@ -178,6 +193,18 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   }
   if (runRateNeeded != null && currentRunRate != null && runRateNeeded > currentRunRate * 1.4) {
     p[4] *= 1.25; p[6] *= 1.4; p.W *= 1.25; p[0] *= 0.8;
+  }
+
+  // 7. Per-innings "day factor" — some days a lineup just clicks, other
+  // days nothing comes off the bat. Applied last, after every situational
+  // adjustment, so it scales the whole ball outcome rather than fighting
+  // with any one factor above.
+  if (battingDayFactor != null) {
+    const f = battingDayFactor;
+    p[4] *= clamp(1 + (f - 1) * 1.2, 0.55, 1.9);
+    p[6] *= clamp(1 + (f - 1) * 1.5, 0.45, 2.2);
+    p.W *= clamp(1 - (f - 1) * 0.5, 0.55, 1.6);
+    p[0] *= clamp(1 - (f - 1) * 0.35, 0.65, 1.4);
   }
 
   return normalize(p);
@@ -335,6 +362,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
   const timeline = [];
   const oversSummary = [];
   let extras = 0;
+  const battingDayFactor = rollBattingDayFactor();
   const extrasByType = { wide: 0, noball: 0, bye: 0 };
 
   const { eligible, maxOversPerBowler } = getEligibleBowlers(bowlingTeam, totalOvers);
@@ -383,7 +411,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
         runs += 1; extras += 1; extrasByType.noball += 1; bowlerLog.runs += 1; runsThisOver += 1;
         const probs = getBallProbabilities({
           batter, bowler, pitch, over, totalOvers,
-          wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls,
+          wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls, battingDayFactor,
         });
         let bonusOutcome = pickOutcome(probs);
         if (bonusOutcome === "W") bonusOutcome = 0; // no conventional dismissal off a no-ball
@@ -408,7 +436,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
 
       const probs = getBallProbabilities({
         batter, bowler, pitch, over, totalOvers,
-        wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls - 1,
+        wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls - 1, battingDayFactor,
       });
       let outcome = pickOutcome(probs);
       const wasFreeHit = freeHit;

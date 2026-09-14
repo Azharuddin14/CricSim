@@ -488,6 +488,13 @@ const BOWLING_STYLES = [
 const SPIN_STYLES = ["Right Arm Off Break", "Slow Left Arm Orthodox", "Right Arm Leg Spin", "Left Arm Chinaman"];
 
 function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+function rollBattingDayFactor() {
+  const r = Math.random();
+  if (r < 0.08) return 1.15 + Math.random() * 0.18;
+  if (r < 0.16) return 0.68 + Math.random() * 0.17;
+  return 0.90 + Math.random() * 0.20;
+}
 function normalize(p) {
   const total = Object.values(p).reduce((a, b) => a + b, 0);
   const out = {};
@@ -495,7 +502,7 @@ function normalize(p) {
   return out;
 }
 
-function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced }) {
+function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced, battingDayFactor }) {
   let p = { ...BASE_PROBS };
   const skillDiff = (batter.batting - bowler.bowling) / 65;
   p.W *= clamp(1 - skillDiff * 0.6, 0.4, 1.7);
@@ -565,6 +572,13 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   if (wicketsDown >= 7) { p[4] *= 0.7; p[6] *= 0.5; p.W *= 0.75; p[0] *= 1.2; p[1] *= 1.1; }
   if (runRateNeeded != null && currentRunRate != null && runRateNeeded > currentRunRate * 1.4) {
     p[4] *= 1.25; p[6] *= 1.4; p.W *= 1.25; p[0] *= 0.8;
+  }
+  if (battingDayFactor != null) {
+    const f = battingDayFactor;
+    p[4] *= clamp(1 + (f - 1) * 1.2, 0.55, 1.9);
+    p[6] *= clamp(1 + (f - 1) * 1.5, 0.45, 2.2);
+    p.W *= clamp(1 - (f - 1) * 0.5, 0.55, 1.6);
+    p[0] *= clamp(1 - (f - 1) * 0.35, 0.65, 1.4);
   }
   return normalize(p);
 }
@@ -700,6 +714,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
   const timeline = [];
   const oversSummary = [];
   let extras = 0;
+  const battingDayFactor = rollBattingDayFactor();
   const extrasByType = { wide: 0, noball: 0, bye: 0 };
   const { eligible, maxOversPerBowler } = getEligibleBowlers(bowlingTeam, totalOvers);
   let ballsBowled = 0;
@@ -737,7 +752,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
       }
       if (extraRoll < effectiveWideChance + NOBALL_CHANCE) {
         runs += 1; extras += 1; extrasByType.noball += 1; bowlerLog.runs += 1; runsThisOver += 1;
-        const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls });
+        const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls, battingDayFactor });
         let bonusOutcome = pickOutcome(probs);
         if (bonusOutcome === "W") bonusOutcome = 0;
         runs += bonusOutcome; batterLog.runs += bonusOutcome; bowlerLog.runs += bonusOutcome; runsThisOver += bonusOutcome;
@@ -754,7 +769,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
       const selfBalls = bowlerBallsSelf.get(bowler);
       bowlerLog.overs = Math.floor(selfBalls / 6) + (selfBalls % 6) / 10;
 
-      const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls - 1 });
+      const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls - 1, battingDayFactor });
       let outcome = pickOutcome(probs);
       const wasFreeHit = freeHit;
       freeHit = false;
