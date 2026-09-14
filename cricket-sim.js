@@ -81,7 +81,7 @@ function normalize(p) {
  * This is the core "rating model" — every multiplier here is a
  * deliberate, documented design choice, not extracted from anywhere.
  */
-function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced, battingDayFactor, partner }) {
+function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced, battingDayFactor, partner, batterRunsSoFar }) {
   let p = { ...BASE_PROBS };
 
   // 1. Skill differential: batting rating vs bowling rating, -1..1
@@ -197,7 +197,14 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
     p[4] *= 1.25; p[6] *= 1.4; p.W *= 1.25; p[0] *= 0.8;
   }
 
-  // 7. Partnership dynamics — if the partner at the other end is already
+  // 7. Past a half-century, a set batter cashes in — real T20 batters who've
+  // got their eye in and reached a landmark accelerate, since they've
+  // already proven themselves and can now capitalize while they're in.
+  if (batterRunsSoFar != null && batterRunsSoFar >= 50) {
+    p[4] *= 1.28; p[6] *= 1.45; p[0] *= 0.82; p.W *= 1.05;
+  }
+
+  // 8. Partnership dynamics — if the partner at the other end is already
   // scoring quickly (or built for aggression), this batter leans toward
   // anchoring; if the partner is quiet (or built to anchor), this batter
   // leans toward keeping the rate ticking instead. A modest complement to
@@ -217,7 +224,7 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
     }
   }
 
-  // 8. Per-innings "day factor" — some days a lineup just clicks, other
+  // 9. Per-innings "day factor" — some days a lineup just clicks, other
   // days nothing comes off the bat. Applied last, after every situational
   // adjustment, so it scales the whole ball outcome rather than fighting
   // with any one factor above.
@@ -448,6 +455,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
           batter, bowler, pitch, over, totalOvers,
           wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls, battingDayFactor,
           partner: battingTeam[nonStrikerIdx] ? { battingSkill: battingTeam[nonStrikerIdx].battingSkill, runs: battingLog[nonStrikerIdx].runs, balls: battingLog[nonStrikerIdx].balls } : null,
+          batterRunsSoFar: batterLog.runs,
         });
         let bonusOutcome = pickOutcome(probs);
         if (bonusOutcome === "W") bonusOutcome = 0; // no conventional dismissal off a no-ball
@@ -474,6 +482,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
         batter, bowler, pitch, over, totalOvers,
         wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls - 1, battingDayFactor,
         partner: battingTeam[nonStrikerIdx] ? { battingSkill: battingTeam[nonStrikerIdx].battingSkill, runs: battingLog[nonStrikerIdx].runs, balls: battingLog[nonStrikerIdx].balls } : null,
+        batterRunsSoFar: batterLog.runs,
       });
       let outcome = pickOutcome(probs);
       const wasFreeHit = freeHit;
@@ -620,7 +629,7 @@ function decideToss(pitch) {
 /** Picks a Man of the Match using a simple runs+wickets impact score —
  * all-rounder contributions (batting and bowling in the same match)
  * combine naturally since they're keyed by name+team together. */
-function pickManOfTheMatch({ first, second, battingFirstTeamName, bowlingFirstTeamName }) {
+function pickManOfTheMatch({ first, second, battingFirstTeamName, bowlingFirstTeamName, winnerTeamName }) {
   const scores = new Map();
   function bump(name, teamName, amount) {
     const key = name + "|||" + teamName;
@@ -633,7 +642,13 @@ function pickManOfTheMatch({ first, second, battingFirstTeamName, bowlingFirstTe
   second.battingLog.forEach(b => { if (b.balls > 0) bump(b.name, bowlingFirstTeamName, b.runs); });
   second.bowlingLog.forEach(b => { if (b.overs > 0) bump(b.name, battingFirstTeamName, b.wickets * 20 - b.runs * 0.5); });
   let best = null;
-  scores.forEach(s => { if (!best || s.impact > best.impact) best = s; });
+  // Man of the Match comes from the winning side, same as real cricket —
+  // falls back to considering everyone only on a tie, where there's no
+  // winning team to restrict to.
+  scores.forEach(s => {
+    if (winnerTeamName && s.teamName !== winnerTeamName) return;
+    if (!best || s.impact > best.impact) best = s;
+  });
   return best;
 }
 
@@ -662,7 +677,11 @@ function simulateMatch({ teamA, teamB, pitch, totalOvers = 20 }) {
     margin = `won by ${first.runs - second.runs} run${first.runs - second.runs === 1 ? "" : "s"}`;
   }
 
-  const motm = pickManOfTheMatch({ first, second, battingFirstTeamName: "battingFirstTeam", bowlingFirstTeamName: "bowlingFirstTeam" });
+  let winnerLabel = null;
+  if (winner === "teamA") winnerLabel = battingFirstIsA ? "battingFirstTeam" : "bowlingFirstTeam";
+  else if (winner === "teamB") winnerLabel = battingFirstIsA ? "bowlingFirstTeam" : "battingFirstTeam";
+
+  const motm = pickManOfTheMatch({ first, second, battingFirstTeamName: "battingFirstTeam", bowlingFirstTeamName: "bowlingFirstTeam", winnerTeamName: winnerLabel });
 
   return {
     toss, battingFirstTeam: battingFirstIsA ? "teamA" : "teamB",

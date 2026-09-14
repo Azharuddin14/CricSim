@@ -503,7 +503,7 @@ function normalize(p) {
   return out;
 }
 
-function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced, battingDayFactor, partner }) {
+function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced, battingDayFactor, partner, batterRunsSoFar }) {
   let p = { ...BASE_PROBS };
   const skillDiff = (batter.batting - bowler.bowling) / 65;
   p.W *= clamp(1 - skillDiff * 0.6, 0.4, 1.7);
@@ -574,6 +574,9 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   if (runRateNeeded != null && currentRunRate != null && runRateNeeded > currentRunRate * 1.4) {
     p[4] *= 1.25; p[6] *= 1.4; p.W *= 1.25; p[0] *= 0.8;
   }
+  if (batterRunsSoFar != null && batterRunsSoFar >= 50) {
+    p[4] *= 1.28; p[6] *= 1.45; p[0] *= 0.82; p.W *= 1.05;
+  }
   if (partner) {
     const partnerAggressive = partner.battingSkill === "Compulsive Slogger" || partner.battingSkill === "Pinch Hitter";
     const partnerAnchor = partner.battingSkill === "Specialist Batsman";
@@ -604,11 +607,16 @@ function pickOutcome(probs) {
   return 0;
 }
 
-const RUN_OUT_CHANCE = 0.02;
+// Run Out is now one of the weighted dismissal types in getDismissalType,
+// drawn from the same unified wicket-probability pool as every other
+// dismissal — matching cricket-sim.js and no longer a separate additive
+// check, which was inflating the overall wicket rate.
 
 function getDismissalType(bowler, hasKeeper) {
   const isSpin = SPIN_STYLES.includes(bowler.bowlingStyle);
-  const weights = { Caught: 55, Bowled: 25, LBW: isSpin ? 12 : 18, Stumped: (isSpin && hasKeeper) ? 10 : 0 };
+  const stumpedShare = (isSpin && hasKeeper) ? 8 : 0;
+  const weights = { Bowled: 20, Caught: 55, LBW: 12, Stumped: stumpedShare, "Run Out": 5 };
+  if (stumpedShare === 0) weights.Caught += 8; // redistribute the zeroed-out Stumped share
   const total = Object.values(weights).reduce((a, b) => a + b, 0);
   let r = Math.random() * total, acc = 0;
   for (const [type, w] of Object.entries(weights)) {
@@ -770,7 +778,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
       }
       if (extraRoll < effectiveWideChance + NOBALL_CHANCE) {
         runs += 1; extras += 1; extrasByType.noball += 1; bowlerLog.runs += 1; runsThisOver += 1;
-        const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls, battingDayFactor, partner: battingTeam[nonStrikerIdx] ? { battingSkill: battingTeam[nonStrikerIdx].battingSkill, runs: battingLog[nonStrikerIdx].runs, balls: battingLog[nonStrikerIdx].balls } : null });
+        const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls, battingDayFactor, partner: battingTeam[nonStrikerIdx] ? { battingSkill: battingTeam[nonStrikerIdx].battingSkill, runs: battingLog[nonStrikerIdx].runs, balls: battingLog[nonStrikerIdx].balls } : null, batterRunsSoFar: batterLog.runs });
         let bonusOutcome = pickOutcome(probs);
         if (bonusOutcome === "W") bonusOutcome = 0;
         runs += bonusOutcome; batterLog.runs += bonusOutcome; bowlerLog.runs += bonusOutcome; runsThisOver += bonusOutcome;
@@ -787,44 +795,32 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
       const selfBalls = bowlerBallsSelf.get(bowler);
       bowlerLog.overs = Math.floor(selfBalls / 6) + (selfBalls % 6) / 10;
 
-      const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls - 1, battingDayFactor, partner: battingTeam[nonStrikerIdx] ? { battingSkill: battingTeam[nonStrikerIdx].battingSkill, runs: battingLog[nonStrikerIdx].runs, balls: battingLog[nonStrikerIdx].balls } : null });
+      const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls - 1, battingDayFactor, partner: battingTeam[nonStrikerIdx] ? { battingSkill: battingTeam[nonStrikerIdx].battingSkill, runs: battingLog[nonStrikerIdx].runs, balls: battingLog[nonStrikerIdx].balls } : null, batterRunsSoFar: batterLog.runs });
       let outcome = pickOutcome(probs);
       const wasFreeHit = freeHit;
       freeHit = false;
       if (outcome === "W" && wasFreeHit) outcome = 0;
 
-      let isRunOut = false;
-      if ((outcome === 1 || outcome === 2) && Math.random() < RUN_OUT_CHANCE) isRunOut = true;
-
-      if (isRunOut) {
+      if (outcome === "W") {
         wickets++;
         batterLog.out = true;
-        const fielderPool = bowlingTeam;
-        const fielder = fielderPool[Math.floor(Math.random() * fielderPool.length)].name;
-        const entry = { type: "Run Out", bowler: null, fielder };
-        batterLog.dismissal = entry;
-        fallOfWickets.push({ wicketNumber: wickets, score: runs, overBall: `${over}.${legalBalls + 1}`, batter: batter.name, dismissal: dismissalText(entry) });
-        timeline.push({ over: over + 1, ball: legalBalls + 1, score: runs, wickets, batterName: batter.name, bowlerName: bowler.name, commentary: formatBallCommentary({ isWicket: true, mode: "Run Out", batterName: batter.name }) });
-        strikerIdx = Math.max(strikerIdx, nonStrikerIdx) + 1;
-        legalBalls++;
-        if (strikerIdx >= battingTeam.length) break;
-      } else if (outcome === "W") {
-        wickets++;
-        batterLog.out = true;
-        bowlerLog.wickets++;
         const keeper = bowlingTeam.find(p => p.isWicketKeeper);
         const dismissalType = getDismissalType(bowler, !!keeper);
+        const creditsBowler = dismissalType !== "Run Out";
+        if (creditsBowler) bowlerLog.wickets++;
         let fielder = null;
         if (dismissalType === "Caught") {
           const fielderPool = bowlingTeam.filter(p => p !== bowler);
           fielder = (fielderPool.length ? fielderPool[Math.floor(Math.random() * fielderPool.length)] : bowler).name;
         } else if (dismissalType === "Stumped") {
           fielder = keeper.name;
+        } else if (dismissalType === "Run Out") {
+          fielder = bowlingTeam[Math.floor(Math.random() * bowlingTeam.length)].name;
         }
-        const entry = { type: dismissalType, bowler: bowler.name, fielder };
+        const entry = { type: dismissalType, bowler: creditsBowler ? bowler.name : null, fielder };
         batterLog.dismissal = entry;
         fallOfWickets.push({ wicketNumber: wickets, score: runs, overBall: `${over}.${legalBalls + 1}`, batter: batter.name, dismissal: dismissalText(entry) });
-        timeline.push({ over: over + 1, ball: legalBalls + 1, score: runs, wickets, batterName: batter.name, bowlerName: bowler.name, commentary: formatBallCommentary({ isWicket: true, mode: dismissalType, batterName: batter.name, bowlerName: bowler.name }) });
+        timeline.push({ over: over + 1, ball: legalBalls + 1, score: runs, wickets, batterName: batter.name, bowlerName: bowler.name, commentary: formatBallCommentary({ isWicket: true, mode: dismissalType, batterName: batter.name, bowlerName: bowler.name, fielder }) });
         strikerIdx = Math.max(strikerIdx, nonStrikerIdx) + 1;
         legalBalls++;
         if (strikerIdx >= battingTeam.length) break;
@@ -905,7 +901,7 @@ function formatBallCommentary({ isWicket, mode, runs, batterName, bowlerName, fi
   return `${bowlerName} to ${batterName}, ${runs} run${runs === 1 ? "" : "s"}.`;
 }
 
-function pickManOfTheMatch({ first, second, battingFirstTeamName, bowlingFirstTeamName }) {
+function pickManOfTheMatch({ first, second, battingFirstTeamName, bowlingFirstTeamName, winnerTeamName }) {
   const scores = new Map();
   function bump(name, teamName, amount) {
     const key = name + "|||" + teamName;
@@ -918,7 +914,10 @@ function pickManOfTheMatch({ first, second, battingFirstTeamName, bowlingFirstTe
   second.battingLog.forEach(b => { if (b.balls > 0) bump(b.name, bowlingFirstTeamName, b.runs); });
   second.bowlingLog.forEach(b => { if (b.overs > 0) bump(b.name, battingFirstTeamName, b.wickets * 20 - b.runs * 0.5); });
   let best = null;
-  scores.forEach(s => { if (!best || s.impact > best.impact) best = s; });
+  scores.forEach(s => {
+    if (winnerTeamName && s.teamName !== winnerTeamName) return;
+    if (!best || s.impact > best.impact) best = s;
+  });
   return best;
 }
 
@@ -944,7 +943,11 @@ function simulateMatch({ teamA, teamB, pitch, totalOvers, teamAName, teamBName }
 
   const firstTeamName = battingFirstIsA ? teamAName : teamBName;
   const secondTeamName = battingFirstIsA ? teamBName : teamAName;
-  const motm = pickManOfTheMatch({ first, second, battingFirstTeamName: firstTeamName, bowlingFirstTeamName: secondTeamName });
+  let winnerTeamName = null;
+  if (second.runs >= target) winnerTeamName = secondTeamName;
+  else if (second.runs < first.runs) winnerTeamName = firstTeamName;
+  // else: tied — no winning team, motm falls back to considering everyone
+  const motm = pickManOfTheMatch({ first, second, battingFirstTeamName: firstTeamName, bowlingFirstTeamName: secondTeamName, winnerTeamName });
 
   return {
     toss: { ...toss, tossWinnerName },
