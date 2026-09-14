@@ -502,18 +502,27 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   const deathPhase = over >= totalOvers - 4;
   const isSpinBowler = SPIN_STYLES.includes(bowler.bowlingStyle);
 
-  if (batter.battingSkill === "Compulsive Slogger") { p[4] *= 1.2; p[6] *= 1.45; p.W *= 1.25; p[0] *= 0.85; }
+  if (batter.battingSkill === "Compulsive Slogger") { p[4] *= 1.2; p[6] *= 1.45; p.W *= 1.25; p[0] *= 0.85; p[1] *= 1.1; }
   else if (batter.battingSkill === "Specialist Batsman") { p[0] *= 0.88; p[1] *= 1.05; p[4] *= 1.15; p[6] *= 1.2; p.W *= 0.8; }
   else if (batter.battingSkill === "Finisher") {
     if (deathPhase) { p[4] *= 1.15; p[6] *= 1.35; p.W *= 1.1; p[0] *= 0.9; }
-    else { p.W *= 0.85; p[4] *= 0.9; p[6] *= 0.85; p[0] *= 1.05; }
+    else { p.W *= 0.85; p[4] *= 0.9; p[6] *= 0.85; p[0] *= 1.02; p[1] *= 1.1; p[2] *= 1.1; }
   }
-  else if (batter.battingSkill === "Pinch Hitter" && earlyPhase) { p[4] *= 1.2; p[6] *= 1.3; p.W *= 1.2; p[0] *= 0.85; }
+  else if (batter.battingSkill === "Pinch Hitter") { p[4] *= 1.2; p[6] *= 1.4; p.W *= 1.4; p[0] *= 0.82; }
 
   if (bowler.bowlingSkill === "Specialist Bowler") { p.W *= 1.25; p[0] *= 1.1; p[4] *= 0.88; p[6] *= 0.85; }
-  else if (bowler.bowlingSkill === "New Ball Bowler" && earlyPhase) { p[0] *= 1.15; p.W *= 1.2; p[4] *= 0.85; p[6] *= 0.8; }
-  else if (bowler.bowlingSkill === "Death/Old Ball Bowler" && deathPhase) { p[4] *= 0.8; p[6] *= 0.75; p.W *= 1.2; p[0] *= 1.1; }
-  else if (bowler.bowlingSkill === "Mystery Spinner" && isSpinBowler) { p.W *= 1.2; p[6] *= 1.1; p[0] *= 1.05; p[4] *= 0.95; }
+  else if (bowler.bowlingSkill === "New Ball Bowler") {
+    if (earlyPhase) { p[0] *= 1.15; p.W *= 1.2; p[4] *= 0.85; p[6] *= 0.8; }
+    else if (deathPhase) { p[4] *= 1.12; p[6] *= 1.15; p.W *= 0.9; }
+  }
+  else if (bowler.bowlingSkill === "Death/Old Ball Bowler") {
+    if (deathPhase) { p[4] *= 0.8; p[6] *= 0.75; p.W *= 1.2; p[0] *= 1.1; }
+    else if (earlyPhase) { p[4] *= 1.1; p[6] *= 1.1; p.W *= 0.9; }
+  }
+  else if (bowler.bowlingSkill === "Mystery Spinner" && isSpinBowler) {
+    if (deathPhase) { p.W *= 1.05; p[6] *= 1.3; p[4] *= 1.15; p[0] *= 0.9; }
+    else { p.W *= 1.2; p[6] *= 1.1; p[0] *= 1.05; p[4] *= 0.95; }
+  }
 
   if (isSpinBowler) {
     const spinFactor = (pitch.grip + pitch.variation) / 20;
@@ -713,13 +722,14 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
       const runRateNeeded = target != null ? ((target - runs) / oversLeft) : null;
       const currentRunRate = ballsBowled > 0 ? runs / (ballsBowled / 6) : 0;
       const extraRoll = Math.random();
+      const effectiveWideChance = bowler.bowlingSkill === "Mystery Spinner" ? WIDE_CHANCE * 1.6 : WIDE_CHANCE;
 
-      if (extraRoll < WIDE_CHANCE) {
+      if (extraRoll < effectiveWideChance) {
         runs += 1; extras += 1; extrasByType.wide += 1; bowlerLog.runs += 1; runsThisOver += 1;
         timeline.push({ over: over + 1, ball: legalBalls + 1, score: runs, wickets, batterName: batter.name, bowlerName: bowler.name, extra: "wide", commentary: `${bowler.name} to ${batter.name}, WIDE.` });
         continue;
       }
-      if (extraRoll < WIDE_CHANCE + NOBALL_CHANCE) {
+      if (extraRoll < effectiveWideChance + NOBALL_CHANCE) {
         runs += 1; extras += 1; extrasByType.noball += 1; bowlerLog.runs += 1; runsThisOver += 1;
         const probs = getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown: wickets, runRateNeeded, currentRunRate, batterBallsFaced: batterLog.balls });
         let bonusOutcome = pickOutcome(probs);

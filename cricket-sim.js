@@ -80,7 +80,9 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   const earlyPhase = over < totalOvers * 0.3;
   const deathPhase = over >= totalOvers - 4;
   if (batter.battingSkill === "Compulsive Slogger") {
-    p[4] *= 1.2; p[6] *= 1.45; p.W *= 1.25; p[0] *= 0.85;
+    // mishits off the middle still often beat the field for a single —
+    // this is a low-percentage, high-reward slogger, not a total gambler
+    p[4] *= 1.2; p[6] *= 1.45; p.W *= 1.25; p[0] *= 0.85; p[1] *= 1.1;
   } else if (batter.battingSkill === "Specialist Batsman") {
     // the premier batting skill — a genuine white-ball specialist, strong
     // across the board with no real trade-off, unlike the situational traits
@@ -89,12 +91,18 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
     if (deathPhase) {
       p[4] *= 1.15; p[6] *= 1.35; p.W *= 1.1; p[0] *= 0.9;
     } else {
-      // not their moment yet — plays it safe, building the innings and
-      // saving the aggression for when it actually matters
-      p.W *= 0.85; p[4] *= 0.9; p[6] *= 0.85; p[0] *= 1.05;
+      // not their moment yet — actively anchors the innings, rotating
+      // strike with 1s and 2s rather than just playing risk-free dots,
+      // saving the real aggression for when it actually matters
+      p.W *= 0.85; p[4] *= 0.9; p[6] *= 0.85; p[0] *= 1.02; p[1] *= 1.1; p[2] *= 1.1;
     }
-  } else if (batter.battingSkill === "Pinch Hitter" && earlyPhase) {
-    p[4] *= 1.2; p[6] *= 1.3; p.W *= 1.2; p[0] *= 0.85;
+  } else if (batter.battingSkill === "Pinch Hitter") {
+    // a lower-order basher, not a powerplay-promotion tactic — real examples
+    // (Starc, Cummins, Shaheen, Shadab) mostly bat in the middle/death overs,
+    // not the powerplay, so this is always-on rather than phase-gated.
+    // Deliberately more boom-or-bust than Compulsive Slogger — "very
+    // inconsistent" — higher wicket risk for a similar boundary payoff.
+    p[4] *= 1.2; p[6] *= 1.4; p.W *= 1.4; p[0] *= 0.82;
   }
 
   // 3. Bowling special skills
@@ -102,12 +110,28 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
     // the premier bowling skill — a genuine white-ball specialist, strong
     // across the board with no real trade-off
     p.W *= 1.25; p[0] *= 1.1; p[4] *= 0.88; p[6] *= 0.85;
-  } else if (bowler.bowlingSkill === "New Ball Bowler" && earlyPhase) {
-    p[0] *= 1.15; p.W *= 1.2; p[4] *= 0.85; p[6] *= 0.8;
-  } else if (bowler.bowlingSkill === "Death/Old Ball Bowler" && deathPhase) {
-    p[4] *= 0.8; p[6] *= 0.75; p.W *= 1.2; p[0] *= 1.1;
+  } else if (bowler.bowlingSkill === "New Ball Bowler") {
+    if (earlyPhase) {
+      p[0] *= 1.15; p.W *= 1.2; p[4] *= 0.85; p[6] *= 0.8;
+    } else if (deathPhase) {
+      // out of their specialty this late — no fresh-ball swing left to lean on
+      p[4] *= 1.12; p[6] *= 1.15; p.W *= 0.9;
+    }
+  } else if (bowler.bowlingSkill === "Death/Old Ball Bowler") {
+    if (deathPhase) {
+      p[4] *= 0.8; p[6] *= 0.75; p.W *= 1.2; p[0] *= 1.1;
+    } else if (earlyPhase) {
+      // no fresh-ball movement to exploit this early — their tricks are built for later
+      p[4] *= 1.1; p[6] *= 1.1; p.W *= 0.9;
+    }
   } else if (bowler.bowlingSkill === "Mystery Spinner" && isSpin(bowler.bowlingStyle)) {
-    p.W *= 1.2; p[6] *= 1.1; p[0] *= 1.05; p[4] *= 0.95;
+    if (deathPhase) {
+      // if a batter's picked the variation, there's no fallback plan —
+      // the trick either lands or it gets punished
+      p.W *= 1.05; p[6] *= 1.3; p[4] *= 1.15; p[0] *= 0.9;
+    } else {
+      p.W *= 1.2; p[6] *= 1.1; p[0] *= 1.05; p[4] *= 0.95;
+    }
   }
 
   // 4. Pitch: pace bowlers lean on speed/bounce, spinners lean on
@@ -340,8 +364,11 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
       const currentRunRate = ballsBowled > 0 ? runs / (ballsBowled / 6) : 0;
 
       const extraRoll = Math.random();
+      // a Mystery Spinner's variations occasionally go astray — their
+      // unpredictability cuts both ways, costing them in extras sometimes
+      const effectiveWideChance = bowler.bowlingSkill === "Mystery Spinner" ? WIDE_CHANCE * 1.6 : WIDE_CHANCE;
 
-      if (extraRoll < WIDE_CHANCE) {
+      if (extraRoll < effectiveWideChance) {
         runs += 1; extras += 1; extrasByType.wide += 1; bowlerLog.runs += 1; runsThisOver += 1;
         timeline.push({
           over: over + 1, ball: legalBalls + 1, bowlerName: bowler.name, batterName: batter.name,
@@ -351,7 +378,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
         continue; // re-bowl — doesn't count as a legal delivery
       }
 
-      if (extraRoll < WIDE_CHANCE + NOBALL_CHANCE) {
+      if (extraRoll < effectiveWideChance + NOBALL_CHANCE) {
         runs += 1; extras += 1; extrasByType.noball += 1; bowlerLog.runs += 1; runsThisOver += 1;
         const probs = getBallProbabilities({
           batter, bowler, pitch, over, totalOvers,
