@@ -70,11 +70,11 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   let p = { ...BASE_PROBS };
 
   // 1. Skill differential: batting rating vs bowling rating, -1..1
-  const skillDiff = (batter.batting - bowler.bowling) / 100;
-  p.W *= clamp(1 - skillDiff * 0.6, 0.45, 1.6);
-  p[4] *= clamp(1 + skillDiff * 0.5, 0.55, 1.8);
-  p[6] *= clamp(1 + skillDiff * 0.6, 0.45, 2.0);
-  p[0] *= clamp(1 - skillDiff * 0.3, 0.6, 1.4);
+  const skillDiff = (batter.batting - bowler.bowling) / 65;
+  p.W *= clamp(1 - skillDiff * 0.6, 0.4, 1.7);
+  p[4] *= clamp(1 + skillDiff * 0.5, 0.5, 1.9);
+  p[6] *= clamp(1 + skillDiff * 0.6, 0.4, 2.1);
+  p[0] *= clamp(1 - skillDiff * 0.3, 0.55, 1.45);
 
   // 2. Batting special skills
   const earlyPhase = over < totalOvers * 0.3;
