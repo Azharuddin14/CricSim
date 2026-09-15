@@ -302,6 +302,10 @@
     display: none; position: fixed; inset: 0; z-index: 100; background: #0F2C22;
     overflow-y: auto; flex-direction: column;
   }
+  /* These two modals can be opened from *inside* the Seasons overlay
+     (z-index: 100), so they need to sit above it — otherwise they open
+     correctly but render completely hidden behind it. */
+  #seasonLiveOverlay, #seasonScorecardOverlay { z-index: 110; }
   .seasons-app-overlay.open { display: flex; }
   .ps-header {
     background: #1B4332; border-bottom: 4px solid #E8A33D; padding: 18px 20px;
@@ -341,6 +345,18 @@
     font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 6px; min-height: unset;
   }
   .ps-scorecard-btn:hover { background: rgba(27,67,50,0.16); }
+  .ps-create-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+  .ps-inline-field { color: #16213E; font-size: 10.5px; display: flex; flex-direction: column; gap: 4px; }
+  .ps-create-btn {
+    background: #E8A33D; color: #16213E; font-weight: 700; font-size: 13.5px; font-family: 'Inter', sans-serif;
+    padding: 9px 18px; border-radius: 6px; border: none; cursor: pointer; min-height: unset;
+  }
+  .ps-create-btn:hover { filter: brightness(1.06); }
+  .ps-open-season-btn {
+    background: #1B4332; color: #F5EFDC; font-weight: 600; font-size: 12px; font-family: 'Inter', sans-serif;
+    padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; min-height: unset; flex-shrink: 0;
+  }
+  .ps-open-season-btn:hover { filter: brightness(1.15); }
   .scroll-list .player-list { margin-bottom: 0; }
   .player-count { font-size: 11px; color: var(--cream-dim); margin: 4px 0 10px; }
   .player-count-warning { color: var(--wicket); font-weight: 600; }
@@ -2384,55 +2400,54 @@ function renderSeasonsAppHome() {
         const finalMatch = finalRound && finalRound.matches[0];
         const championHtml = (finalMatch && isPlayed(finalMatch))
           ? `<div class="ps-champion-line">🏆 ${getTeam(getWinnerId(finalMatch))?.name || "Tied"}</div>`
-          : "";
+          : `<div class="ps-dim" style="margin-top:4px; font-style:italic;">In progress</div>`;
         return `
         <div class="ps-season-list-card" data-season-id="${s.id}">
           <div style="flex:1 1 auto; min-width:0;">
             <div class="ps-season-list-name">${s.name}</div>
-            <div class="ps-season-list-meta">${(s.groundNames || []).join(", ") || "No ground set"} · ${s.teamIds.length} teams</div>
+            <div class="ps-season-list-meta">${(s.groundNames || []).join(", ") || "No ground set"} · ${s.teamIds.length} teams · ${s.oversPerMatch || 20} overs/match</div>
             ${championHtml}
           </div>
-          <button class="ps-remove-btn delete-season-btn" data-season-id="${s.id}">Delete</button>
+          <button class="ps-open-season-btn open-season-btn" data-season-id="${s.id}">Open</button>
         </div>`;
       }).join("");
 
   body.innerHTML = `
     <div class="ps-card">
       <div class="ps-card-title">Create Season</div>
-      <label style="color:#16213E; font-size:12px; display:flex; flex-direction:column; gap:4px;">Season name
-        <input type="text" id="newSeasonName" value="Season 1" class="ps-select" style="width:100%; box-sizing:border-box;" />
-      </label>
+      <div class="ps-create-row">
+        <label class="ps-inline-field" style="flex:1 1 160px;">Season name
+          <input type="text" id="newSeasonName" value="Season 1" class="ps-select" style="width:100%; box-sizing:border-box;" />
+        </label>
+        <label class="ps-inline-field" style="flex:0 0 90px;">Overs/match
+          <input type="number" id="newSeasonOvers" value="20" min="1" class="ps-select" style="width:100%; box-sizing:border-box;" />
+        </label>
+        <button class="ps-create-btn" id="createSeasonBtn">Create</button>
+      </div>
       <p class="ps-stat-heading" style="margin-top:12px;">Grounds (fixtures rotate across them at random)</p>
       <div class="tournament-team-checks" id="newSeasonGrounds" style="max-height:180px; overflow-y:auto; color:#16213E;">${allGrounds().map(g => `<label><input type="checkbox" value="${g.name}" /> ${g.name}</label>`).join("")}</div>
       <p class="ps-stat-heading" style="margin-top:12px;">Teams (must be full 11-player squads)</p>
       <div class="tournament-team-checks" style="color:#16213E;">${eligibleTeams.map(t => `<label><input type="checkbox" value="${t.id}" /> ${t.name}</label>`).join("") || '<p class="ps-empty">No full teams available yet.</p>'}</div>
-      <button class="ps-ghost-btn" id="createSeasonBtn" style="margin-top:12px; background:#E8A33D; border-color:#E8A33D; color:#16213E; font-weight:700;">Create</button>
     </div>
     ${seasonListHtml}
   `;
 
-  body.querySelectorAll(".ps-season-list-card").forEach(card => {
-    card.addEventListener("click", (e) => {
-      if (e.target.closest(".delete-season-btn")) return;
-      seasonsAppActiveSeasonId = Number(card.dataset.seasonId);
+  body.querySelectorAll(".open-season-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      seasonsAppActiveSeasonId = Number(btn.dataset.seasonId);
       seasonsAppScreen = "detail";
       seasonsDetailTab = "matches";
       renderSeasonsApp();
     });
   });
-  body.querySelectorAll(".delete-season-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      appState.seasons = appState.seasons.filter(s => s.id !== Number(btn.dataset.seasonId));
-      renderSeasonsApp();
-    });
-  });
   document.getElementById("createSeasonBtn").onclick = () => {
     const name = document.getElementById("newSeasonName").value || "New Season";
+    const oversPerMatch = Number(document.getElementById("newSeasonOvers").value) || 20;
     const groundNames = [...document.querySelectorAll('#newSeasonGrounds input:checked')].map(c => c.value);
     const teamIds = [...body.querySelectorAll('.tournament-team-checks:not(#newSeasonGrounds) input:checked')].map(c => Number(c.value));
     if (teamIds.length < 2) { alert("Pick at least 2 teams for the season."); return; }
     if (groundNames.length === 0) { alert("Pick at least 1 ground for the season."); return; }
-    const season = { id: nextId++, name, groundNames, teamIds, groups: [], knockoutRounds: [] };
+    const season = { id: nextId++, name, oversPerMatch, groundNames, teamIds, groups: [], knockoutRounds: [] };
     appState.seasons.push(season);
     seasonsAppActiveSeasonId = season.id;
     seasonsAppScreen = "detail";
@@ -2462,8 +2477,7 @@ function renderSeasonsAppDetail() {
   if (!season.groundNames) season.groundNames = season.groundName ? [season.groundName] : [allGrounds()[0].name];
   const defaultGround = getGroundByName(season.groundNames[0]) || allGrounds()[0];
   const pitch = { speed: defaultGround.speed ?? 6, grip: defaultGround.grip ?? 5, bounce: defaultGround.bounce ?? 6, variation: defaultGround.variation ?? 5, deterioration: defaultGround.deterioration ?? 5, __groundName: defaultGround.name };
-  const totalOvers = 20;
-
+  const totalOvers = season.oversPerMatch || 20;
   const finalRound = season.knockoutRounds[season.knockoutRounds.length - 1];
   const finalMatch = finalRound && finalRound.matches[0];
   const championHtml = (finalMatch && isPlayed(finalMatch))
@@ -2544,13 +2558,23 @@ function renderSeasonsAppDetail() {
     <div class="ps-card">
       <div class="ps-card-header-row" style="margin-bottom:0;">
         <span class="ps-card-title" style="margin-bottom:0;">${season.name}</span>
-        <span class="ps-dim">${season.groundNames.join(", ")}</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="ps-dim">${season.groundNames.join(", ")} · ${totalOvers} overs/match</span>
+          <button class="ps-remove-btn delete-season-btn" data-season-id="${season.id}">Delete Season</button>
+        </div>
       </div>
       ${championHtml}
     </div>
     ${subtabHtml}
     <div id="seasonsDetailContent">${contentHtml}</div>
   `;
+
+  body.querySelector(".delete-season-btn").onclick = () => {
+    if (!confirm("Delete this season and all its data?")) return;
+    appState.seasons = appState.seasons.filter(s => s.id !== season.id);
+    seasonsAppScreen = "home";
+    renderSeasonsApp();
+  };
 
   document.getElementById("backToSeasonsHomeBtn").onclick = () => { seasonsAppScreen = "home"; renderSeasonsApp(); };
   body.querySelectorAll(".ps-subtab-btn").forEach(btn => {
