@@ -224,6 +224,14 @@
   .sq-card-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .sq-card-name { color: var(--cream); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sq-card-meta { color: var(--cream-dim); font-size: 10.5px; font-family: 'JetBrains Mono', monospace; }
+  .team-selector-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .team-selector-pill {
+    display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line); border-radius: 20px; padding: 7px 14px;
+    font-family: 'Inter', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--cream-dim); cursor: pointer;
+  }
+  .team-selector-pill.active { background: rgba(27,67,50,0.5); border-color: var(--pitch-light); color: var(--cream); }
+  .team-selector-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
   .scroll-list .player-list { margin-bottom: 0; }
   .player-count { font-size: 11px; color: var(--cream-dim); margin: 4px 0 10px; }
   .player-count-warning { color: var(--wicket); font-weight: 600; }
@@ -1372,7 +1380,9 @@ function renderPlayerDbList() {
   });
 
   const rows = ranked.map((p, idx) => {
-    const batChip = skillChipHtml(p.batting, p.battingSkill === "Specialist Batsman", BATTING_SKILL_SHORT[p.battingSkill]);
+    const batChip = p.role === "purebowler"
+      ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
+      : skillChipHtml(p.batting, p.battingSkill === "Specialist Batsman", BATTING_SKILL_SHORT[p.battingSkill]);
     const bowlChip = p.bowlingStyle === "Does Not Bowl"
       ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
       : skillChipHtml(p.bowling, p.bowlingSkill === "Specialist Bowler", BOWLING_SKILL_SHORT[p.bowlingSkill]);
@@ -1412,9 +1422,11 @@ function openPlayerModal(player) {
   // infer the starting role from existing data — only from clear signals
   // (a keeper flag, or bowlingStyle already "Does Not Bowl"); anything else
   // defaults to All-rounder rather than guessing from a merely-low rating
-  let initialRole = "allrounder";
-  if (p.isWicketKeeper) initialRole = "keeper";
-  else if (p.bowlingStyle === "Does Not Bowl") initialRole = "purebatter";
+  let initialRole = p.role || "allrounder";
+  if (!p.role) {
+    if (p.isWicketKeeper) initialRole = "keeper";
+    else if (p.bowlingStyle === "Does Not Bowl") initialRole = "purebatter";
+  }
 
   form.innerHTML = `
     <label>Name <input type="text" data-role="name" value="${p.name}" /></label>
@@ -1484,6 +1496,7 @@ function openPlayerModal(player) {
     const isWicketKeeper = role === "keeper";
     const updated = {
       name: get("name") || "Player",
+      role,
       batting: Number(get("bat")) || 0,
       bowling: Number(get("bowl")) || 0,
       battingSkill: role === "purebowler" ? "None" : get("batskill"),
@@ -1516,9 +1529,13 @@ function openPlayerModal(player) {
 // Select Teams tab
 // ============================================================
 document.getElementById("addTeamBtn").addEventListener("click", () => {
-  appState.teams.push({ id: nextId++, name: "New Team", playerIds: [], color: "#457B9D" });
+  const newTeam = { id: nextId++, name: "New Team", playerIds: [], color: "#457B9D" };
+  appState.teams.push(newTeam);
+  currentTeamView = newTeam.id;
   renderTeamsTab();
 });
+
+let currentTeamView = null; // id of the team currently shown in the builder
 
 function renderTeamsTab() {
   persistState();
@@ -1527,51 +1544,62 @@ function renderTeamsTab() {
     container.innerHTML = `<p class="hint-text">No teams yet — add one to start building a squad.</p>`;
     return;
   }
-  container.innerHTML = appState.teams.map(team => {
-    const players = teamPlayers(team);
-    const rows = players.map((p, idx) => `
-      <div class="sq-player-card" data-player-id="${p.id}">
-        <div class="sq-order-num">${idx + 1}</div>
-        <div class="sq-order-stack">
-          <button class="sq-order-btn move-up-btn" data-team-id="${team.id}" data-idx="${idx}" ${idx === 0 ? "disabled" : ""}>▲</button>
-          <button class="sq-order-btn move-down-btn" data-team-id="${team.id}" data-idx="${idx}" ${idx === players.length - 1 ? "disabled" : ""}>▼</button>
-        </div>
-        <div class="sq-card-body">
-          <span class="sq-card-name">${p.name}</span>
-          <span class="sq-card-meta">Bat ${p.batting} · Bowl ${p.bowling}${p.isWicketKeeper ? " · WK" : ""}</span>
-        </div>
-        <button class="card-info-btn remove-link" data-team-id="${team.id}" data-player-id="${p.id}" style="color:var(--wicket); font-size:12px; font-weight:600;">Remove</button>
-      </div>`).join("");
-    const available = unassignedPlayers();
-    const addOptions = available.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
-    return `
-      <div class="team-card" data-team-id="${team.id}">
-        <div class="team-card-header">
-          <input type="color" data-role="teamcolor" data-team-id="${team.id}" value="${team.color || "#457B9D"}" class="team-color-swatch" />
-          <input class="team-name-input" data-role="teamname" data-team-id="${team.id}" value="${team.name}" style="font-size:20px;" />
-          <span class="team-roster-count ${players.length === 11 ? "" : "warn"}">${players.length}/11 players</span>
-        </div>
-        <p class="hint-text">Use ▲▼ to set batting order — position 1 bats first.</p>
-        <div class="player-list">${rows || '<p class="hint-text">No players assigned yet.</p>'}</div>
-        <div class="add-to-team-row">
-          <select data-role="addplayer" data-team-id="${team.id}" ${available.length === 0 ? "disabled" : ""}>
-            <option value="">${available.length === 0 ? "No unassigned players" : "Add a player…"}</option>
-            ${addOptions}
-          </select>
-          <button class="btn-ghost delete-team-btn" data-team-id="${team.id}">Delete team</button>
-        </div>
-      </div>`;
-  }).join("");
+  if (currentTeamView == null || !getTeam(currentTeamView)) currentTeamView = appState.teams[0].id;
 
-  container.querySelectorAll('[data-role="teamcolor"]').forEach(input => {
-    input.addEventListener("input", () => { getTeam(Number(input.dataset.teamId)).color = input.value; });
+  const selectorHtml = `
+    <div class="team-selector-row">
+      ${appState.teams.map(t => `
+        <button class="team-selector-pill ${t.id === currentTeamView ? "active" : ""}" data-team-id="${t.id}">
+          <span class="team-selector-dot" style="background:${t.color || "#457B9D"};"></span>
+          ${t.name} <span class="hint-text">(${t.playerIds.length}/11)</span>
+        </button>`).join("")}
+    </div>`;
+
+  const team = getTeam(currentTeamView);
+  const players = teamPlayers(team);
+  const rows = players.map((p, idx) => `
+    <div class="sq-player-card" data-player-id="${p.id}">
+      <div class="sq-order-num">${idx + 1}</div>
+      <div class="sq-order-stack">
+        <button class="sq-order-btn move-up-btn" data-idx="${idx}" ${idx === 0 ? "disabled" : ""}>▲</button>
+        <button class="sq-order-btn move-down-btn" data-idx="${idx}" ${idx === players.length - 1 ? "disabled" : ""}>▼</button>
+      </div>
+      <div class="sq-card-body">
+        <span class="sq-card-name">${p.name}</span>
+        <span class="sq-card-meta">Bat ${p.batting} · Bowl ${p.bowling}${p.isWicketKeeper ? " · WK" : ""}</span>
+      </div>
+      <button class="card-info-btn remove-link" data-player-id="${p.id}" style="color:var(--wicket); font-size:12px; font-weight:600;">Remove</button>
+    </div>`).join("");
+  const available = unassignedPlayers();
+  const addOptions = available.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
+
+  const builderHtml = `
+    <div class="team-card" data-team-id="${team.id}">
+      <div class="team-card-header">
+        <input type="color" data-role="teamcolor" value="${team.color || "#457B9D"}" class="team-color-swatch" />
+        <input class="team-name-input" data-role="teamname" value="${team.name}" style="font-size:20px;" />
+        <span class="team-roster-count ${players.length === 11 ? "" : "warn"}">${players.length}/11 players</span>
+      </div>
+      <p class="hint-text">Use ▲▼ to set batting order — position 1 bats first.</p>
+      <div class="player-list">${rows || '<p class="hint-text">No players assigned yet.</p>'}</div>
+      <div class="add-to-team-row">
+        <select data-role="addplayer" ${available.length === 0 ? "disabled" : ""}>
+          <option value="">${available.length === 0 ? "No unassigned players" : "Add a player…"}</option>
+          ${addOptions}
+        </select>
+        <button class="btn-ghost delete-team-btn">Delete team</button>
+      </div>
+    </div>`;
+
+  container.innerHTML = selectorHtml + builderHtml;
+
+  container.querySelectorAll(".team-selector-pill").forEach(btn => {
+    btn.addEventListener("click", () => { currentTeamView = Number(btn.dataset.teamId); renderTeamsTab(); });
   });
-  container.querySelectorAll('[data-role="teamname"]').forEach(input => {
-    input.addEventListener("input", () => { getTeam(Number(input.dataset.teamId)).name = input.value; });
-  });
+  container.querySelector('[data-role="teamcolor"]').addEventListener("input", (e) => { team.color = e.target.value; });
+  container.querySelector('[data-role="teamname"]').addEventListener("input", (e) => { team.name = e.target.value; });
   container.querySelectorAll(".move-up-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      const team = getTeam(Number(btn.dataset.teamId));
       const idx = Number(btn.dataset.idx);
       if (idx > 0) [team.playerIds[idx - 1], team.playerIds[idx]] = [team.playerIds[idx], team.playerIds[idx - 1]];
       renderTeamsTab();
@@ -1579,7 +1607,6 @@ function renderTeamsTab() {
   });
   container.querySelectorAll(".move-down-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      const team = getTeam(Number(btn.dataset.teamId));
       const idx = Number(btn.dataset.idx);
       if (idx < team.playerIds.length - 1) [team.playerIds[idx + 1], team.playerIds[idx]] = [team.playerIds[idx], team.playerIds[idx + 1]];
       renderTeamsTab();
@@ -1587,24 +1614,22 @@ function renderTeamsTab() {
   });
   container.querySelectorAll(".remove-link").forEach(btn => {
     btn.addEventListener("click", () => {
-      const team = getTeam(Number(btn.dataset.teamId));
       team.playerIds = team.playerIds.filter(id => id !== Number(btn.dataset.playerId));
       renderTeamsTab();
     });
   });
-  container.querySelectorAll('[data-role="addplayer"]').forEach(select => {
-    select.addEventListener("change", () => {
-      if (!select.value) return;
-      const team = getTeam(Number(select.dataset.teamId));
-      team.playerIds.push(Number(select.value));
+  const addSelect = container.querySelector('[data-role="addplayer"]');
+  if (addSelect) {
+    addSelect.addEventListener("change", () => {
+      if (!addSelect.value) return;
+      team.playerIds.push(Number(addSelect.value));
       renderTeamsTab();
     });
-  });
-  container.querySelectorAll(".delete-team-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      appState.teams = appState.teams.filter(t => t.id !== Number(btn.dataset.teamId));
-      renderTeamsTab();
-    });
+  }
+  container.querySelector(".delete-team-btn").addEventListener("click", () => {
+    appState.teams = appState.teams.filter(t => t.id !== team.id);
+    currentTeamView = null;
+    renderTeamsTab();
   });
 }
 
