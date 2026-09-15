@@ -173,6 +173,57 @@
   .match-result-line b { color: var(--cream); }
   .player-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
   .scroll-list { max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 2px; }
+
+  /* Player leaderboard — Squad Ledger's exact chip/tier/table styling */
+  .chip {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 3px 9px; border-radius: 5px;
+    font-weight: 700; font-size: 12px; background: rgba(22,51,36,0.52); border: 1px solid var(--line); color: var(--cream-dim);
+    width: 50px; box-sizing: border-box;
+  }
+  .chip .skill { font-weight: 400; opacity: 0.75; font-size: 10.5px; }
+  .skill-gold { color: #FFB703 !important; opacity: 1 !important; font-weight: 700; }
+  .tier-95 { background: linear-gradient(180deg, rgba(255,183,3,0.22), rgba(255,183,3,0.08)); border: 1.5px solid #FFB703; color: #FFB703; }
+  .tier-90 { background: linear-gradient(180deg, rgba(207,216,220,0.20), rgba(207,216,220,0.06)); border: 1.5px solid #CFD8DC; color: #CFD8DC; }
+  .tier-85 { background: linear-gradient(180deg, rgba(205,138,77,0.22), rgba(205,138,77,0.08)); border: 1.5px solid #CD8A4D; color: #CD8A4D; }
+  .players-table-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; max-height: 60vh; overflow-y: auto; overflow-x: auto; }
+  .players-table { width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 12.5px; }
+  .players-table thead th {
+    position: sticky; top: 0; background: var(--panel); z-index: 1;
+    text-align: left; padding: 8px 10px; color: var(--pitch-light);
+    font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    border-bottom: 1px solid var(--line);
+  }
+  .players-table td { padding: 6px 10px; border-bottom: 1px solid rgba(245,239,220,0.06); white-space: nowrap; }
+  .players-table tbody tr:hover { background: rgba(27,67,50,0.35); }
+  .players-table .rank-col { color: var(--cream-dim); width: 36px; }
+  .players-table .name-col { color: var(--cream); font-weight: 700; }
+  .players-table .meta-col { color: var(--cream-dim); font-size: 11.5px; }
+
+  /* Squad-style player card (numbered badge + up/down order stack) —
+     used in Select Teams for the batting-order reorder feature */
+  .sq-player-card {
+    display: flex; align-items: center; gap: 10px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.08)), var(--panel);
+    border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; min-height: 46px;
+    font-family: 'Inter', sans-serif; font-size: 12.5px; transition: border-color 0.12s;
+  }
+  .sq-player-card:hover { border-color: rgba(45,106,79,0.5); }
+  .sq-order-num {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 22px; height: 22px; border-radius: 50%; background: var(--pitch-light); color: #05130b;
+    font-size: 11px; font-weight: 700; font-family: 'Inter', sans-serif;
+  }
+  .sq-order-stack { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; margin: 0 2px; }
+  .sq-order-btn {
+    background: rgba(0,0,0,0.2); border: 1px solid var(--line); color: var(--cream-dim); border-radius: 4px;
+    width: 22px; height: 13px; font-size: 7px; cursor: pointer; padding: 0; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sq-order-btn:hover:not(:disabled) { color: var(--pitch-light); border-color: var(--pitch-light); background: rgba(27,67,50,0.3); }
+  .sq-order-btn:disabled { opacity: 0.2; cursor: default; }
+  .sq-card-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .sq-card-name { color: var(--cream); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sq-card-meta { color: var(--cream-dim); font-size: 10.5px; font-family: 'JetBrains Mono', monospace; }
   .scroll-list .player-list { margin-bottom: 0; }
   .player-count { font-size: 11px; color: var(--cream-dim); margin: 4px 0 10px; }
   .player-count-warning { color: var(--wicket); font-weight: 600; }
@@ -358,7 +409,7 @@
         <button class="btn-primary" id="addPlayerBtn">+ Add player</button>
       </div>
       <input type="text" id="playerSearchInput" placeholder="Search players by name…" style="margin-bottom:14px;" />
-      <div id="playerDbList" class="scroll-list"></div>
+      <div id="playerDbList"></div>
     </div>
   </div>
 
@@ -401,6 +452,20 @@
       <div id="seasonsList"></div>
     </div>
     <div id="seasonDetail"></div>
+  </div>
+
+  <div id="seasonLiveOverlay" class="modal-overlay">
+    <div class="modal-box" style="max-width:640px;">
+      <div class="live-scoreboard">
+        <div class="live-label" id="seasonLiveLabel">—</div>
+        <div class="live-score" id="seasonLiveScore"></div>
+      </div>
+      <div class="commentary-feed" id="seasonLiveFeed"></div>
+      <div id="seasonLiveFinalSummary" style="display:none; max-height:60vh; overflow-y:auto;"></div>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button type="button" class="btn-ghost" id="seasonLiveCloseBtn" style="display:none;">Back to season</button>
+      </div>
+    </div>
   </div>
 
   <div id="quickmatchTab" class="tab-panel">
@@ -1263,6 +1328,21 @@ function renderPlayerDb() {
   renderPlayerDbList();
 }
 
+const BATTING_SKILL_SHORT = { "Compulsive Slogger": "CS", "Specialist Batsman": "SB", "Finisher": "FN", "Pinch Hitter": "PH" };
+const BOWLING_SKILL_SHORT = { "Specialist Bowler": "SB", "New Ball Bowler": "NB", "Death/Old Ball Bowler": "DB", "Mystery Spinner": "MS" };
+const HAND_SHORT = { "Right-handed": "RHB", "Left-handed": "LHB" };
+
+function ratingTierClass(rating) {
+  if (rating >= 95) return "tier-95";
+  if (rating >= 90) return "tier-90";
+  if (rating >= 85) return "tier-85";
+  return "";
+}
+function skillChipHtml(rating, isPremiumSkill, shortSkill) {
+  if (rating == null) return `<span class="chip" style="opacity:0.3;">&mdash;</span>`;
+  return `<span class="chip ${ratingTierClass(rating)}">${rating}<span class="skill ${isPremiumSkill ? "skill-gold" : ""}">${shortSkill || ""}</span></span>`;
+}
+
 function renderPlayerDbList() {
   const list = document.getElementById("playerDbList");
   const searchInput = document.getElementById("playerSearchInput");
@@ -1277,20 +1357,39 @@ function renderPlayerDbList() {
     list.innerHTML = `<p class="hint-text">No players match "${searchInput.value}".</p>`;
     return;
   }
-  const rows = filtered.map(p => {
-    const team = playerTeam(p.id);
-    return `
-      <div class="player-row" data-player-id="${p.id}">
-        <div class="player-row-main">
-          <span class="player-name">${p.name}${team ? ` <span class="player-ratings">(${team.name})</span>` : ""}</span>
-          <span class="player-ratings mono">Bat ${p.batting} · Bowl ${p.bowling} · ${p.bowlingStyle}</span>
-        </div>
-        <button class="edit-player-btn" data-player-id="${p.id}">Edit</button>
-      </div>`;
+  // ranked by the player's higher rating (bat or bowl), same as Squad Ledger's leaderboard sort
+  const ranked = [...filtered].sort((a, b) => {
+    const topA = Math.max(a.batting, a.bowling), topB = Math.max(b.batting, b.bowling);
+    if (topB !== topA) return topB - topA;
+    return a.name.localeCompare(b.name);
+  });
+
+  const rows = ranked.map((p, idx) => {
+    const batChip = skillChipHtml(p.batting, p.battingSkill === "Specialist Batsman", BATTING_SKILL_SHORT[p.battingSkill]);
+    const bowlChip = p.bowlingStyle === "Does Not Bowl"
+      ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
+      : skillChipHtml(p.bowling, p.bowlingSkill === "Specialist Bowler", BOWLING_SKILL_SHORT[p.bowlingSkill]);
+    const hand = HAND_SHORT[p.battingHand] || p.battingHand;
+    const style = p.bowlingStyle === "Does Not Bowl" ? "—" : p.bowlingStyle;
+    return `<tr class="leaderboard-row" data-player-id="${p.id}">
+      <td class="rank-col">${idx + 1}</td>
+      <td class="name-col">${p.name}${p.isWicketKeeper ? ` <span class="hint-text" style="font-size:10px;">WK</span>` : ""}</td>
+      <td>${batChip}</td>
+      <td>${bowlChip}</td>
+      <td class="meta-col">${hand}</td>
+      <td class="meta-col">${style}</td>
+    </tr>`;
   }).join("");
-  list.innerHTML = `<div class="player-list">${rows}</div>`;
-  list.querySelectorAll(".edit-player-btn").forEach(btn => {
-    btn.addEventListener("click", () => openPlayerModal(getPlayer(Number(btn.dataset.playerId))));
+
+  list.innerHTML = `
+    <div class="players-table-wrap">
+      <table class="players-table">
+        <thead><tr><th>#</th><th>Player</th><th>Bat</th><th>Bowl</th><th>Hand</th><th>Style</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  list.querySelectorAll(".leaderboard-row").forEach(row => {
+    row.addEventListener("click", () => openPlayerModal(getPlayer(Number(row.dataset.playerId))));
   });
 }
 
@@ -1400,16 +1499,17 @@ function renderTeamsTab() {
   container.innerHTML = appState.teams.map(team => {
     const players = teamPlayers(team);
     const rows = players.map((p, idx) => `
-      <div class="player-row" data-player-id="${p.id}">
-        <div class="reorder-btns">
-          <button class="reorder-btn move-up-btn" data-team-id="${team.id}" data-idx="${idx}" ${idx === 0 ? "disabled" : ""}>▲</button>
-          <button class="reorder-btn move-down-btn" data-team-id="${team.id}" data-idx="${idx}" ${idx === players.length - 1 ? "disabled" : ""}>▼</button>
+      <div class="sq-player-card" data-player-id="${p.id}">
+        <div class="sq-order-num">${idx + 1}</div>
+        <div class="sq-order-stack">
+          <button class="sq-order-btn move-up-btn" data-team-id="${team.id}" data-idx="${idx}" ${idx === 0 ? "disabled" : ""}>▲</button>
+          <button class="sq-order-btn move-down-btn" data-team-id="${team.id}" data-idx="${idx}" ${idx === players.length - 1 ? "disabled" : ""}>▼</button>
         </div>
-        <div class="player-row-main">
-          <span class="player-name">${idx + 1}. ${p.name}</span>
-          <span class="player-ratings mono">Bat ${p.batting} · Bowl ${p.bowling}</span>
+        <div class="sq-card-body">
+          <span class="sq-card-name">${p.name}</span>
+          <span class="sq-card-meta">Bat ${p.batting} · Bowl ${p.bowling}${p.isWicketKeeper ? " · WK" : ""}</span>
         </div>
-        <button class="remove-link" data-team-id="${team.id}" data-player-id="${p.id}">Remove</button>
+        <button class="card-info-btn remove-link" data-team-id="${team.id}" data-player-id="${p.id}" style="color:var(--wicket); font-size:12px; font-weight:600;">Remove</button>
       </div>`).join("");
     const available = unassignedPlayers();
     const addOptions = available.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
@@ -1661,6 +1761,52 @@ function addMissingFixtures(group) {
 }
 /** Runs a season match through the simulation engine and fills in its
  * score/mom/battingFirstId — the same shape as a hand-entered result. */
+/** Live, ball-by-ball version of a season match — same simulation and
+ * same playback the Quick Match tab uses, just shown in an overlay so it
+ * can be triggered from anywhere in the Seasons tab. Applies the match's
+ * score fields and records it to history only once the reveal finishes,
+ * matching how Quick Match behaves. */
+function playSeasonMatchLive(match, pitch, totalOvers, onDone) {
+  const teamA = getTeam(match.team1Id), teamB = getTeam(match.team2Id);
+  const result = simulateMatch({
+    teamA: teamPlayers(teamA), teamB: teamPlayers(teamB), pitch, totalOvers,
+    teamAName: teamA.name, teamBName: teamB.name,
+  });
+  const colors = { firstTeamColor: result.firstTeamName === teamA.name ? teamA.color : teamB.color, secondTeamColor: result.firstTeamName === teamA.name ? teamB.color : teamA.color };
+
+  const overlay = document.getElementById("seasonLiveOverlay");
+  const feedEl = document.getElementById("seasonLiveFeed");
+  const liveLabelEl = document.getElementById("seasonLiveLabel");
+  const liveScoreEl = document.getElementById("seasonLiveScore");
+  const finalSummaryEl = document.getElementById("seasonLiveFinalSummary");
+  const closeBtn = document.getElementById("seasonLiveCloseBtn");
+  finalSummaryEl.style.display = "none";
+  finalSummaryEl.innerHTML = "";
+  closeBtn.style.display = "none";
+  overlay.style.display = "flex";
+
+  playBackMatch(result, colors, {
+    feedEl, liveLabelEl, liveScoreEl, finalSummaryEl,
+    onComplete: () => {
+      const firstIsTeamA = result.firstTeamName === teamA.name;
+      match.battingFirstId = firstIsTeamA ? match.team1Id : match.team2Id;
+      const firstScore = { runs: result.first.runs, wkts: result.first.wickets, overs: formatOvers(result.first.oversUsed), allOut: result.first.wickets >= 10 };
+      const secondScore = { runs: result.second.runs, wkts: result.second.wickets, overs: formatOvers(result.second.oversUsed), allOut: result.second.wickets >= 10 };
+      if (firstIsTeamA) { match.score1 = firstScore; match.score2 = secondScore; }
+      else { match.score2 = firstScore; match.score1 = secondScore; }
+      if (result.margin === "Match tied") match.tieWinnerId = null;
+      match.mom = result.motm ? `${result.motm.name} (${result.motm.teamName})` : "";
+      match.fullResult = result;
+      recordMatch({
+        groundName: pitch.__groundName || "Custom", teamAName: teamA.name, teamBName: teamB.name,
+        teamAColor: teamA.color, teamBColor: teamB.color, result, tournamentId: null,
+      });
+      closeBtn.style.display = "";
+      closeBtn.onclick = () => { overlay.style.display = "none"; if (onDone) onDone(); };
+    },
+  });
+}
+
 function simulateSeasonMatch(match, pitch, totalOvers) {
   const teamA = getTeam(match.team1Id), teamB = getTeam(match.team2Id);
   const result = simulateMatch({
@@ -2134,9 +2280,7 @@ function wireGroupCards(season, pitch, totalOvers) {
     btn.onclick = () => {
       const group = season.groups.find(g => g.id === Number(btn.dataset.groupId));
       const match = group.matches.find(m => m.id === Number(btn.dataset.matchId));
-      simulateSeasonMatch(match, pitch, totalOvers);
-      persistState();
-      renderSeasonDetail();
+      playSeasonMatchLive(match, pitch, totalOvers, () => { persistState(); renderSeasonDetail(); });
     };
   });
 }
@@ -2157,9 +2301,7 @@ function wireKnockoutCards(season, pitch, totalOvers) {
     btn.onclick = () => {
       const round = season.knockoutRounds.find(r => r.id === Number(btn.dataset.roundId));
       const match = round.matches.find(m => m.id === Number(btn.dataset.matchId));
-      simulateSeasonMatch(match, pitch, totalOvers);
-      persistState();
-      renderSeasonDetail();
+      playSeasonMatchLive(match, pitch, totalOvers, () => { persistState(); renderSeasonDetail(); });
     };
   });
 }
@@ -2267,10 +2409,13 @@ document.getElementById("simulateBtn").addEventListener("click", () => {
 
 /** Plays the pre-computed match back ball by ball at ~2 overs (12 balls)
  * per second, then reveals the full scorecards once both innings finish. */
-function playBackMatch(result, teamColors) {
-  const feed = document.getElementById("commentaryFeed");
-  const liveLabel = document.getElementById("liveLabel");
-  const liveScore = document.getElementById("liveScore");
+function playBackMatch(result, teamColors, opts) {
+  opts = opts || {};
+  const feed = opts.feedEl || document.getElementById("commentaryFeed");
+  const liveLabel = opts.liveLabelEl || document.getElementById("liveLabel");
+  const liveScore = opts.liveScoreEl || document.getElementById("liveScore");
+  const finalSummaryEl = opts.finalSummaryEl || document.getElementById("finalSummary");
+  const onComplete = opts.onComplete || null;
   const MS_PER_BALL = 1000 / 12; // 2 overs = 12 balls per second
   const colors = teamColors || { firstTeamColor: "#E63946", secondTeamColor: "#1D3557" };
 
@@ -2293,7 +2438,8 @@ function playBackMatch(result, teamColors) {
       if (inningsIdx >= innings.length) {
         liveLabel.textContent = "Match complete";
         liveScore.textContent = "";
-        renderCompleteScorecard(result, colors);
+        renderCompleteScorecard(result, colors, finalSummaryEl);
+        if (onComplete) onComplete();
         return;
       }
       setTimeout(step, 600);
@@ -2347,7 +2493,8 @@ function buildTeamCard(battingTeamName, bowlingTeamName, battingColor, bowlingCo
  * finishes normally, and when restoring an already-finished match after a
  * page reload (the whole match is computed instantly up front, so a
  * reload never actually loses any computation, only the cosmetic replay). */
-function renderCompleteScorecard(result, colors) {
+function renderCompleteScorecard(result, colors, finalEl) {
+  finalEl = finalEl || document.getElementById("finalSummary");
   const motmHtml = result.motm
     ? `<div class="motm-line">Man of the Match: <b>${result.motm.name}</b> (${result.motm.teamName})</div>`
     : "";
@@ -2378,25 +2525,25 @@ function renderCompleteScorecard(result, colors) {
     <div class="sc-tab-panel active" data-scpanel="first">${firstCard}</div>
     <div class="sc-tab-panel" data-scpanel="second">${secondCard}</div>
     <div class="controls-row" style="margin-top:16px;">
-      <button class="btn-ghost" id="downloadScorecardBtn">⬇ Download scorecard as image</button>
+      <button class="btn-ghost download-scorecard-btn">⬇ Download scorecard as image</button>
     </div>
   `;
 
-  const finalEl = document.getElementById("finalSummary");
-  finalEl.style.display = "block";
-  finalEl.innerHTML = scoreboardHtml + tabsHtml;
+  const finalEl2 = finalEl;
+  finalEl2.style.display = "block";
+  finalEl2.innerHTML = scoreboardHtml + tabsHtml;
 
-  finalEl.querySelectorAll(".sc-tab-btn").forEach(btn => {
+  finalEl2.querySelectorAll(".sc-tab-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      finalEl.querySelectorAll(".sc-tab-btn").forEach(b => b.classList.remove("active"));
-      finalEl.querySelectorAll(".sc-tab-panel").forEach(p => p.classList.remove("active"));
+      finalEl2.querySelectorAll(".sc-tab-btn").forEach(b => b.classList.remove("active"));
+      finalEl2.querySelectorAll(".sc-tab-panel").forEach(p => p.classList.remove("active"));
       btn.classList.add("active");
-      finalEl.querySelector(`[data-scpanel="${btn.dataset.scteam}"]`).classList.add("active");
+      finalEl2.querySelector(`[data-scpanel="${btn.dataset.scteam}"]`).classList.add("active");
     });
   });
 
-  document.getElementById("downloadScorecardBtn").addEventListener("click", () => {
-    downloadScorecardImage(finalEl, `${result.firstTeamName}-vs-${result.secondTeamName}-scorecard`);
+  finalEl2.querySelector("#downloadScorecardBtn, .download-scorecard-btn").addEventListener("click", () => {
+    downloadScorecardImage(finalEl2, `${result.firstTeamName}-vs-${result.secondTeamName}-scorecard`);
   });
 }
 
