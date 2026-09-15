@@ -310,12 +310,13 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns) {
       if (b.bowlingSkill === "Mystery Spinner") w *= 2.2;
       if (b.bowlingSkill === "Death/Old Ball Bowler" && over >= 11) w *= 1.15;
     } else if (deathPhase) {
-      // death: death specialists first, then the seamers saved for this
-      // moment, then new-ball bowlers for the reverse-swing angle — spin
-      // is a real but heavily reduced option, never eliminated
+      // death: a specialist seamer with overs still in hand outranks even
+      // a dedicated death bowler — they were saved specifically for this
+      // moment. The death bowler is still a strong second option, and
+      // new-ball bowlers get a boost too for the reverse-swing angle.
       if (isPace) w *= 1.6;
-      if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 2.2;
-      if (b.bowlingSkill === "Specialist Bowler" && isPace) w *= 1.6;
+      if (b.bowlingSkill === "Specialist Bowler" && isPace) w *= 2.6;
+      if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 1.9;
       if (b.bowlingSkill === "New Ball Bowler") w *= 1.4;
       if (isSp) w *= 0.25;
     }
