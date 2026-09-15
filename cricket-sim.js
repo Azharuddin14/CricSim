@@ -292,15 +292,16 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns) {
     const isSp = isSpin(b.bowlingStyle);
 
     if (earlyPhase) {
-      // powerplay: genuine seamers and new-ball specialists dominate;
-      // death bowlers and mystery spinners are essentially locked out
+      // powerplay: genuine seamers and new-ball specialists are strongly
+      // preferred, spinners are a real but reduced option, and death
+      // bowlers are the lowest priority of all — but never zero
       if (isPace) w *= 1.7;
       if (isFastStyle(b)) w *= 1.6;
       if (b.bowlingSkill === "Specialist Bowler" && isPace) w *= 1.8;
       if (b.bowlingSkill === "New Ball Bowler") w *= 1.7;
-      if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 0.05;
-      if (b.bowlingSkill === "Mystery Spinner") w *= 0.05;
-      if (isSp) w *= 0.3;
+      if (isSp) w *= 0.6;
+      if (b.bowlingSkill === "Mystery Spinner") w *= 0.4;
+      if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 0.15;
     } else if (middlePhase) {
       // middle: mystery spinners are the priority option; death bowlers
       // start easing in from over ~12 as the innings turns toward the end
@@ -311,21 +312,18 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns) {
     } else if (deathPhase) {
       // death: death specialists first, then the seamers saved for this
       // moment, then new-ball bowlers for the reverse-swing angle — spin
-      // of any kind is essentially locked out
+      // is a real but heavily reduced option, never eliminated
       if (isPace) w *= 1.6;
       if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 2.2;
       if (b.bowlingSkill === "Specialist Bowler" && isPace) w *= 1.6;
       if (b.bowlingSkill === "New Ball Bowler") w *= 1.4;
-      if (isSp) w *= 0.06;
+      if (isSp) w *= 0.25;
     }
 
-    // "X" (no bowling skill) means a genuine part-timer — never a frontline
-    // option regardless of phase or raw rating
-    if (b.bowlingSkill === "None") w *= 0.35;
-
-    // a genuine death specialist gets held back outside the death overs —
-    // a captain saves their closer rather than burning them at over 9
-    if (b.bowlingSkill === "Death/Old Ball Bowler" && earlyPhase) w *= 0.1;
+    // "X" (no special skill) means a genuine part-timer only if their
+    // bowling rating is actually low — a high-rated bowler with no flavor
+    // skill is still a real option, just without a standout trait
+    if (b.bowlingSkill === "None" && b.bowling < 60) w *= 0.35;
 
     // a bowler who was smashed recently gets a cooling-off period — this
     // persists beyond their immediate spell, unlike the spell-continuation
@@ -358,83 +356,44 @@ function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, power
   // a bowler with no recognized bowling skill ("X") is a genuine part-timer
   // — never worth more than 2 overs across the whole innings regardless of
   // their raw rating or how short the team is on options
-  const capped = b => (oversBowledMap.get(b) || 0) >= (b.bowlingSkill === "None" ? Math.min(2, generalMax) : generalMax);
-  const isPowerplay = over < Math.min(4, totalOvers);
-  const isPaceStyle = b => b.bowlingStyle !== "None" && b.bowlingStyle !== "Does Not Bowl" && !isSpin(b.bowlingStyle);
+  const capped = b => {
+    // "X" (no special skill) only means a genuine part-timer if their
+    // bowling rating is actually low — a high-rated bowler with no flavor
+    // skill assigned is still a real frontline option, not a batter who
+    // occasionally rolls their arm over
+    const isGenuinePartTimer = b.bowlingSkill === "None" && b.bowling < 60;
+    return (oversBowledMap.get(b) || 0) >= (isGenuinePartTimer ? Math.min(2, generalMax) : generalMax);
+  };
   const deathPhase = over >= totalOvers - 4;
-  const earlyPhase = over < Math.round(totalOvers * 0.4);
-
-  // Hard-exclude death bowlers and mystery spinners from the powerplay
-  // window entirely — "completely avoid", not just discourage — unless
-  // doing so would leave the team with literally no one to bowl.
-  if (earlyPhase) {
-    const withoutOffPhase = eligible.filter(b => b.bowlingSkill !== "Death/Old Ball Bowler" && b.bowlingSkill !== "Mystery Spinner");
-    if (withoutOffPhase.length > 0) eligible = withoutOffPhase;
-  }
-  // Same hard rule for any spinner during the death overs.
-  if (deathPhase) {
-    const withoutSpin = eligible.filter(b => !isSpin(b.bowlingStyle));
-    if (withoutSpin.length > 0) eligible = withoutSpin;
-  }
 
   // Reserve the team's best death specialist — but only once they're down
   // to their last couple of overs of eligibility. This lets them still open
-  // the bowling or feature in the powerplay/middle (matching the "prioritise
-  // specialist seamers early" instruction), while guaranteeing at least a
-  // couple of their overs are genuinely held back, not just discouraged,
-  // for when the death overs actually arrive.
+  // the bowling or feature in the powerplay/middle, while guaranteeing at
+  // least a couple of their overs are genuinely held back for the death.
+  let pool = eligible;
   if (reservedDeathBowler && !deathPhase && !capped(reservedDeathBowler)) {
     const oversLeft = generalMax - (oversBowledMap.get(reservedDeathBowler) || 0);
     if (oversLeft <= 2) {
-      const withoutReserved = eligible.filter(b => b !== reservedDeathBowler);
-      if (withoutReserved.length > 0) eligible = withoutReserved;
+      const withoutReserved = pool.filter(b => b !== reservedDeathBowler);
+      if (withoutReserved.length > 0) pool = withoutReserved;
     }
   }
 
-  // Builds the candidate pool, in priority order: preferred-type-and-fresh,
-  // then any-type-and-fresh (never repeat the last bowler if at all
-  // avoidable — that outranks the type preference), then preferred-type
-  // allowing a repeat, then anyone at all as an absolute last resort.
-  // The "not the previous over's bowler" filter is applied at every tier
-  // except the very last, so a repeat only ever happens if truly no one
-  // else can bowl (e.g. a team with only one usable bowler left).
-  function buildPool(preferred, extraFreshFilter) {
-    const notCapped = b => !capped(b);
-    const notLast = b => b !== lastOverBowler;
-    const fresh = extraFreshFilter || (() => true);
-    let pool = preferred.filter(b => notCapped(b) && notLast(b) && fresh(b));
-    if (pool.length) return pool;
-    pool = preferred.filter(b => notCapped(b) && notLast(b));
-    if (pool.length) return pool;
-    pool = eligible.filter(b => notCapped(b) && notLast(b));
-    if (pool.length) return pool;
-    pool = preferred.filter(notCapped);
-    if (pool.length) return pool;
-    pool = eligible.filter(notCapped);
-    if (pool.length) return pool;
-    return eligible;
-  }
+  // "Never bowl consecutive overs" is a hard cricket rule, not a soft
+  // preference — it's relaxed only if the team genuinely has no other
+  // bowler left at all. The overs cap is the next-most-important
+  // constraint, relaxed before "not last" ever is. Every type/phase
+  // preference (pace vs spin, death bowler vs specialist, etc.) is left
+  // entirely to pickWeightedBowler's soft weighting below — a team never
+  // gets hard-blocked out of an over just because their strongest options
+  // happen to be an off-phase type.
+  let candidates = pool.filter(b => !capped(b) && b !== lastOverBowler);
+  if (candidates.length === 0) candidates = pool.filter(b => b !== lastOverBowler);
+  if (candidates.length === 0) candidates = pool.filter(b => !capped(b));
+  if (candidates.length === 0) candidates = pool;
 
-  if (isPowerplay) {
-    // powerplay is seam bowling first — spinners only come in if the team
-    // genuinely has no pace option left
-    const pacePool = eligible.filter(isPaceStyle);
-    const preferred = pacePool.length > 0 ? pacePool : eligible;
-    const pool = buildPool(preferred, b => !powerplayUsed.has(b));
-    const bowler = pickWeightedBowler(pool, over, totalOvers, lastOverRuns);
-    powerplayUsed.add(bowler);
-    return { bowler };
-  }
-
-  // middle and death overs: type is a strong weighted *preference* (handled
-  // inside pickWeightedBowler's phase multipliers), not a hard restriction —
-  // unlike the powerplay, a clearly superior off-type bowler can still win
-  // the over here, which is what stops a weak part-time spinner from
-  // hoovering up overs just because a team is short on quality spin options
-  let pool = eligible.filter(b => !capped(b) && b !== lastOverBowler);
-  if (pool.length === 0) pool = eligible.filter(b => !capped(b));
-  if (pool.length === 0) pool = eligible;
-  const bowler = pickWeightedBowler(pool, over, totalOvers, lastOverRuns);
+  const bowler = pickWeightedBowler(candidates, over, totalOvers, lastOverRuns);
+  if (powerplayUsed) powerplayUsed.add(bowler);
   return { bowler };
 }
 
