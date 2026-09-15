@@ -352,7 +352,7 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns) {
  * previous over is always excluded first, before any type preference,
  * so the same bowler can never go two overs in a row.
  */
-function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler }) {
+function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler }) {
   const generalMax = Math.max(1, Math.ceil(totalOvers / 5));
   // a bowler with no recognized bowling skill ("X") is a genuine part-timer
   // — never worth more than 2 overs across the whole innings regardless of
@@ -390,7 +390,21 @@ function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, power
   // happen to be an off-phase type.
   let candidates = pool.filter(b => !capped(b) && b !== lastOverBowler);
   let mustRelaxCap = false;
-  if (candidates.length === 0) { candidates = pool.filter(b => b !== lastOverBowler); mustRelaxCap = true; }
+  if (candidates.length === 0) {
+    // Before ever bending the 4-over cap for an already-selected bowler,
+    // reach for literally anyone else in the XI (even a rarely-used
+    // batter) who hasn't bowled their max and isn't the last bowler —
+    // the cap is a hard rule, so a genuine emergency option always beats
+    // relaxing it, same as a real captain would rather toss the ball to
+    // someone unusual than break the over limit.
+    const emergencyPool = (fullTeam || eligible).filter(b => b.bowlingStyle !== "Does Not Bowl" && !capped(b) && b !== lastOverBowler);
+    if (emergencyPool.length > 0) {
+      candidates = emergencyPool;
+    } else {
+      candidates = pool.filter(b => b !== lastOverBowler);
+      mustRelaxCap = true;
+    }
+  }
   if (candidates.length === 0) candidates = pool.filter(b => !capped(b));
   if (candidates.length === 0) candidates = pool;
 
@@ -414,13 +428,27 @@ function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, power
  * if a team doesn't have enough recognized bowlers to cover the overs. */
 function getEligibleBowlers(bowlingTeam, totalOvers) {
   const maxOversPerBowler = Math.max(1, Math.ceil(totalOvers / 5));
-  const minBowlersNeeded = Math.ceil(totalOvers / maxOversPerBowler);
+  const capFor = p => {
+    const isGenuinePartTimer = (!p.bowlingSkill || p.bowlingSkill === "None") && p.bowling < 60;
+    return isGenuinePartTimer ? Math.min(2, maxOversPerBowler) : maxOversPerBowler;
+  };
   const canBowl = bowlingTeam.filter(p => p.bowlingStyle !== "Does Not Bowl");
   const byRating = [...canBowl].sort((a, b) => b.bowling - a.bowling);
   let eligible = byRating.filter(p => p.bowling >= BOWLING_ELIGIBLE_MIN);
-  if (eligible.length < minBowlersNeeded) {
-    eligible = byRating.slice(0, Math.max(minBowlersNeeded, eligible.length));
+
+  // The 4-over cap and "never bowl consecutive overs" are absolute rules,
+  // not preferences — so if the recognized bowlers' combined capacity
+  // can't legally cover the innings, pull in further players (by rating,
+  // even ones below the normal eligibility bar) until it can, rather than
+  // ever bending either rule for an already-selected bowler. Any player
+  // not explicitly marked "Does Not Bowl" can send down an over in a
+  // genuine pinch, same as in real cricket.
+  let totalCapacity = eligible.reduce((sum, p) => sum + capFor(p), 0);
+  for (let i = eligible.length; totalCapacity < totalOvers && i < byRating.length; i++) {
+    eligible.push(byRating[i]);
+    totalCapacity += capFor(byRating[i]);
   }
+
   if (eligible.length === 0) eligible = [...bowlingTeam].sort((a, b) => b.bowling - a.bowling); // last-resort fallback only
   return { eligible, maxOversPerBowler };
 }
@@ -464,7 +492,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
   const BYE_CHANCE = 0.02; // only rolled when the underlying delivery would otherwise be a dot
 
   for (let over = 0; over < totalOvers && wickets < 10 && strikerIdx < battingTeam.length && (target == null || runs < target); over++) {
-    const choice = chooseBowlerForOver({ eligible, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler });
+    const choice = chooseBowlerForOver({ eligible, fullTeam: bowlingTeam, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler });
     const bowler = choice.bowler;
     const bowlerLog = bowlingLog[bowlingTeam.indexOf(bowler)];
     if (!bowlerBallsSelf.has(bowler)) bowlerBallsSelf.set(bowler, 0);

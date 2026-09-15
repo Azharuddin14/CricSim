@@ -768,13 +768,20 @@ const BOWLING_ELIGIBLE_MIN = 25;
  * if a team doesn't have enough recognized bowlers to cover the overs. */
 function getEligibleBowlers(bowlingTeam, totalOvers) {
   const maxOversPerBowler = Math.max(1, Math.ceil(totalOvers / 5));
-  const minBowlersNeeded = Math.ceil(totalOvers / maxOversPerBowler);
+  const capFor = p => {
+    const isGenuinePartTimer = (!p.bowlingSkill || p.bowlingSkill === "None") && p.bowling < 60;
+    return isGenuinePartTimer ? Math.min(2, maxOversPerBowler) : maxOversPerBowler;
+  };
   const canBowl = bowlingTeam.filter(p => p.bowlingStyle !== "Does Not Bowl");
   const byRating = [...canBowl].sort((a, b) => b.bowling - a.bowling);
   let eligible = byRating.filter(p => p.bowling >= BOWLING_ELIGIBLE_MIN);
-  if (eligible.length < minBowlersNeeded) {
-    eligible = byRating.slice(0, Math.max(minBowlersNeeded, eligible.length));
+
+  let totalCapacity = eligible.reduce((sum, p) => sum + capFor(p), 0);
+  for (let i = eligible.length; totalCapacity < totalOvers && i < byRating.length; i++) {
+    eligible.push(byRating[i]);
+    totalCapacity += capFor(byRating[i]);
   }
+
   if (eligible.length === 0) eligible = [...bowlingTeam].sort((a, b) => b.bowling - a.bowling); // last-resort fallback only
   return { eligible, maxOversPerBowler };
 }
@@ -839,7 +846,7 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns) {
  * options happen to be an off-phase type. "Never repeat the previous
  * over's bowler" is the one genuinely hard rule, relaxed only if the team
  * has truly no one else; the overs cap is relaxed before that ever is. */
-function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler }) {
+function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler }) {
   const generalMax = Math.max(1, Math.ceil(totalOvers / 5));
   const capped = b => {
     const isGenuinePartTimer = b.bowlingSkill === "None" && b.bowling < 60;
@@ -858,7 +865,15 @@ function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, power
 
   let candidates = pool.filter(b => !capped(b) && b !== lastOverBowler);
   let mustRelaxCap = false;
-  if (candidates.length === 0) { candidates = pool.filter(b => b !== lastOverBowler); mustRelaxCap = true; }
+  if (candidates.length === 0) {
+    const emergencyPool = (fullTeam || eligible).filter(b => b.bowlingStyle !== "Does Not Bowl" && !capped(b) && b !== lastOverBowler);
+    if (emergencyPool.length > 0) {
+      candidates = emergencyPool;
+    } else {
+      candidates = pool.filter(b => b !== lastOverBowler);
+      mustRelaxCap = true;
+    }
+  }
   if (candidates.length === 0) candidates = pool.filter(b => !capped(b));
   if (candidates.length === 0) candidates = pool;
 
@@ -902,7 +917,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
   const BYE_CHANCE = 0.02;
 
   for (let over = 0; over < totalOvers && wickets < 10 && strikerIdx < battingTeam.length && (target == null || runs < target); over++) {
-    const choice = chooseBowlerForOver({ eligible, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler });
+    const choice = chooseBowlerForOver({ eligible, fullTeam: bowlingTeam, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler });
     const bowler = choice.bowler;
     const bowlerLog = bowlingLog[bowlingTeam.indexOf(bowler)];
     if (!bowlerBallsSelf.has(bowler)) bowlerBallsSelf.set(bowler, 0);
