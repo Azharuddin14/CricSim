@@ -289,6 +289,58 @@
   .ps-standings-table td { padding: 6px 9px; color: #16213E; font-family: 'Inter', sans-serif; font-size: 12.5px; border-bottom: 1px solid rgba(27,67,50,0.08); }
   .ps-standings-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; border-radius: 8px; overflow: hidden; }
   @media (min-width: 640px) { .ps-stats-grid { grid-template-columns: 1fr 1fr 1fr; } }
+
+  /* Seasons — dedicated full-screen app-within-app, matching Pitchside's
+     own home screen and navigation exactly rather than living inside the
+     main tab system. */
+  .seasons-launch-btn {
+    margin-top: 14px; background: #E8A33D; color: #16213E; font-family: 'Inter', sans-serif;
+    font-weight: 700; font-size: 14px; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer;
+  }
+  .seasons-launch-btn:hover { filter: brightness(1.08); }
+  .seasons-app-overlay {
+    display: none; position: fixed; inset: 0; z-index: 100; background: #0F2C22;
+    overflow-y: auto; flex-direction: column;
+  }
+  .seasons-app-overlay.open { display: flex; }
+  .ps-header {
+    background: #1B4332; border-bottom: 4px solid #E8A33D; padding: 18px 20px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    position: sticky; top: 0; z-index: 2;
+  }
+  .ps-app-title { font-family: 'Oswald', sans-serif; font-size: 24px; color: #F5EFDC; letter-spacing: 0.03em; margin: 0; }
+  .ps-app-title-accent { color: #E8A33D; }
+  .ps-app-title-sub { color: rgba(245,239,220,0.55); font-size: 15px; letter-spacing: 0.1em; margin-left: 6px; }
+  .ps-app-subtitle { color: rgba(245,239,220,0.6); font-size: 13px; margin: 3px 0 0; }
+  .ps-close-btn {
+    background: #16213E; color: #F5EFDC; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 12.5px;
+    padding: 9px 16px; border-radius: 6px; border: none; cursor: pointer; min-height: unset;
+  }
+  .ps-app-body { max-width: 720px; margin: 0 auto; width: 100%; padding: 18px 16px 40px; box-sizing: border-box; }
+  .ps-back-btn {
+    background: #16213E; color: #F5EFDC; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 12.5px;
+    padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; min-height: unset; margin-bottom: 14px;
+  }
+  .ps-subtab-row { display: flex; gap: 4px; border-bottom: 2px solid rgba(245,239,220,0.12); margin-bottom: 16px; }
+  .ps-subtab-btn {
+    background: none; border: none; color: rgba(245,239,220,0.5); font-family: 'Inter', sans-serif;
+    font-weight: 600; font-size: 13.5px; padding: 10px 18px; border-bottom: 2px solid transparent;
+    margin-bottom: -2px; cursor: pointer; min-height: unset;
+  }
+  .ps-subtab-btn.active { color: #E8A33D; border-bottom-color: #E8A33D; }
+  .ps-season-list-card {
+    background: #F5EFDC; border-radius: 10px; padding: 14px; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 10px; cursor: pointer;
+  }
+  .ps-season-list-card:hover { filter: brightness(0.98); }
+  .ps-season-list-name { font-family: 'Oswald', sans-serif; font-size: 17px; color: #16213E; }
+  .ps-season-list-meta { font-size: 11.5px; color: rgba(22,33,62,0.55); margin-top: 2px; }
+  .ps-champion-line { display: flex; align-items: center; gap: 6px; color: #1B4332; font-size: 12.5px; margin-top: 4px; }
+  .ps-scorecard-btn {
+    background: rgba(27,67,50,0.08); border: 1px solid rgba(27,67,50,0.3); color: #1B4332;
+    font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 6px; min-height: unset;
+  }
+  .ps-scorecard-btn:hover { background: rgba(27,67,50,0.16); }
   .scroll-list .player-list { margin-bottom: 0; }
   .player-count { font-size: 11px; color: var(--cream-dim); margin: 4px 0 10px; }
   .player-count-warning { color: var(--wicket); font-weight: 600; }
@@ -460,6 +512,7 @@
 <header>
   <h1>MATCH<span>SIM</span></h1>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
+  <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
 </header>
 
 <main>
@@ -467,7 +520,6 @@
   <div class="tab-nav">
     <button class="tab-btn active" data-tab="playerdb">Player DB</button>
     <button class="tab-btn" data-tab="teams">Select Teams</button>
-    <button class="tab-btn" data-tab="seasons">Seasons</button>
     <button class="tab-btn" data-tab="quickmatch">Quick Match</button>
     <button class="tab-btn" data-tab="stats">Stats &amp; History</button>
     <button class="tab-btn" data-tab="records">Records</button>
@@ -496,15 +548,15 @@
     </div>
   </div>
 
-  <div id="seasonsTab" class="tab-panel">
-    <div class="panel">
-      <div class="panel-header-row">
-        <h2>Seasons</h2>
-        <button class="btn-primary" id="addSeasonBtn">+ New season</button>
+  <div id="seasonsAppOverlay" class="seasons-app-overlay">
+    <div class="ps-header">
+      <div>
+        <h1 class="ps-app-title">MATCH<span class="ps-app-title-accent">SIM</span> <span class="ps-app-title-sub">SEASONS</span></h1>
+        <p class="ps-app-subtitle" id="seasonsAppSubtitle">Your seasons</p>
       </div>
-      <div id="seasonsList"></div>
+      <button class="ps-close-btn" id="closeSeasonsAppBtn">✕ Close</button>
     </div>
-    <div id="seasonDetail"></div>
+    <div class="ps-app-body" id="seasonsAppBody"></div>
   </div>
 
   <div id="seasonLiveOverlay" class="modal-overlay">
@@ -518,6 +570,15 @@
       <div id="seasonLiveFinalSummary" style="display:none; max-height:60vh; overflow-y:auto;"></div>
       <div class="modal-actions" style="margin-top:14px;">
         <button type="button" class="btn-ghost" id="seasonLiveCloseBtn" style="display:none;">Back to season</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="seasonScorecardOverlay" class="modal-overlay">
+    <div class="modal-box" style="max-width:640px; max-height:85vh; overflow-y:auto;">
+      <div id="seasonScorecardContent"></div>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button type="button" class="btn-ghost" id="closeSeasonScorecardBtn">Close</button>
       </div>
     </div>
   </div>
@@ -1386,7 +1447,6 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     if (btn.dataset.tab === "stats") renderStatsTab();
     if (btn.dataset.tab === "records") renderRecordsTab();
     if (btn.dataset.tab === "grounds") renderGroundsTab();
-    if (btn.dataset.tab === "seasons") renderSeasonsTab();
   });
 });
 
@@ -2289,41 +2349,96 @@ function renderRecordsTab() {
 // Seasons — groups, knockouts, standings (Pitchside structure,
 // auto-simulated fixtures via the engine)
 // ============================================================
-let currentSeasonView = null; // { seasonId, creating }
-let currentSeasonSubTab = "overview"; // "overview" | "prequals" | "groups" | "knockouts"
+let seasonsAppScreen = "home"; // "home" | "detail"
+let seasonsAppActiveSeasonId = null;
+let seasonsDetailTab = "matches"; // "matches" | "stats"
 
 function getSeason(id) { return appState.seasons.find(s => s.id === id); }
 
-function renderSeasonsTab() {
-  persistState();
-  const listEl = document.getElementById("seasonsList");
-  if (appState.seasons.length === 0) {
-    listEl.innerHTML = `<p class="hint-text">No seasons yet — create one to get started.</p>`;
-  } else {
-    listEl.innerHTML = appState.seasons.map(s => `
-      <div class="player-row" data-season-id="${s.id}">
-        <div class="player-row-main">
-          <span class="player-name">${s.name}</span>
-          <span class="player-ratings mono">${s.groundName} · ${s.teamIds.length} teams</span>
-        </div>
-        <button class="edit-player-btn view-season-btn" data-season-id="${s.id}">View</button>
-        <button class="remove-link delete-season-btn" data-season-id="${s.id}">Delete</button>
-      </div>`).join("");
-    listEl.querySelectorAll(".view-season-btn").forEach(btn => {
-      btn.addEventListener("click", () => { currentSeasonView = { seasonId: Number(btn.dataset.seasonId) }; renderSeasonDetail(); });
-    });
-    listEl.querySelectorAll(".delete-season-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        appState.seasons = appState.seasons.filter(s => s.id !== Number(btn.dataset.seasonId));
-        if (currentSeasonView && currentSeasonView.seasonId === Number(btn.dataset.seasonId)) currentSeasonView = null;
-        renderSeasonsTab();
-        renderSeasonDetail();
-      });
-    });
-  }
+function openSeasonsApp() {
+  document.getElementById("seasonsAppOverlay").classList.add("open");
+  seasonsAppScreen = "home";
+  seasonsAppActiveSeasonId = null;
+  renderSeasonsApp();
+}
+function closeSeasonsApp() {
+  document.getElementById("seasonsAppOverlay").classList.remove("open");
+}
+document.getElementById("openSeasonsAppBtn").addEventListener("click", openSeasonsApp);
+document.getElementById("closeSeasonsAppBtn").addEventListener("click", closeSeasonsApp);
 
-  document.getElementById("addSeasonBtn").onclick = () => { currentSeasonView = { creating: true }; renderSeasonDetail(); };
-  renderSeasonDetail();
+function renderSeasonsApp() {
+  persistState();
+  document.getElementById("seasonsAppSubtitle").textContent = seasonsAppScreen === "home" ? "Your seasons" : "";
+  if (seasonsAppScreen === "home") renderSeasonsAppHome();
+  else renderSeasonsAppDetail();
+}
+
+function renderSeasonsAppHome() {
+  const body = document.getElementById("seasonsAppBody");
+  const eligibleTeams = appState.teams.filter(t => t.playerIds.length === 11);
+  const seasonListHtml = appState.seasons.length === 0
+    ? `<p class="ps-empty" style="color:rgba(245,239,220,0.5);">No seasons yet — create one above to get started.</p>`
+    : appState.seasons.map(s => {
+        const finalRound = s.knockoutRounds[s.knockoutRounds.length - 1];
+        const finalMatch = finalRound && finalRound.matches[0];
+        const championHtml = (finalMatch && isPlayed(finalMatch))
+          ? `<div class="ps-champion-line">🏆 ${getTeam(getWinnerId(finalMatch))?.name || "Tied"}</div>`
+          : "";
+        return `
+        <div class="ps-season-list-card" data-season-id="${s.id}">
+          <div style="flex:1 1 auto; min-width:0;">
+            <div class="ps-season-list-name">${s.name}</div>
+            <div class="ps-season-list-meta">${(s.groundNames || []).join(", ") || "No ground set"} · ${s.teamIds.length} teams</div>
+            ${championHtml}
+          </div>
+          <button class="ps-remove-btn delete-season-btn" data-season-id="${s.id}">Delete</button>
+        </div>`;
+      }).join("");
+
+  body.innerHTML = `
+    <div class="ps-card">
+      <div class="ps-card-title">Create Season</div>
+      <label style="color:#16213E; font-size:12px; display:flex; flex-direction:column; gap:4px;">Season name
+        <input type="text" id="newSeasonName" value="Season 1" class="ps-select" style="width:100%; box-sizing:border-box;" />
+      </label>
+      <p class="ps-stat-heading" style="margin-top:12px;">Grounds (fixtures rotate across them at random)</p>
+      <div class="tournament-team-checks" id="newSeasonGrounds" style="max-height:180px; overflow-y:auto; color:#16213E;">${allGrounds().map(g => `<label><input type="checkbox" value="${g.name}" /> ${g.name}</label>`).join("")}</div>
+      <p class="ps-stat-heading" style="margin-top:12px;">Teams (must be full 11-player squads)</p>
+      <div class="tournament-team-checks" style="color:#16213E;">${eligibleTeams.map(t => `<label><input type="checkbox" value="${t.id}" /> ${t.name}</label>`).join("") || '<p class="ps-empty">No full teams available yet.</p>'}</div>
+      <button class="ps-ghost-btn" id="createSeasonBtn" style="margin-top:12px; background:#E8A33D; border-color:#E8A33D; color:#16213E; font-weight:700;">Create</button>
+    </div>
+    ${seasonListHtml}
+  `;
+
+  body.querySelectorAll(".ps-season-list-card").forEach(card => {
+    card.addEventListener("click", (e) => {
+      if (e.target.closest(".delete-season-btn")) return;
+      seasonsAppActiveSeasonId = Number(card.dataset.seasonId);
+      seasonsAppScreen = "detail";
+      seasonsDetailTab = "matches";
+      renderSeasonsApp();
+    });
+  });
+  body.querySelectorAll(".delete-season-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      appState.seasons = appState.seasons.filter(s => s.id !== Number(btn.dataset.seasonId));
+      renderSeasonsApp();
+    });
+  });
+  document.getElementById("createSeasonBtn").onclick = () => {
+    const name = document.getElementById("newSeasonName").value || "New Season";
+    const groundNames = [...document.querySelectorAll('#newSeasonGrounds input:checked')].map(c => c.value);
+    const teamIds = [...body.querySelectorAll('.tournament-team-checks:not(#newSeasonGrounds) input:checked')].map(c => Number(c.value));
+    if (teamIds.length < 2) { alert("Pick at least 2 teams for the season."); return; }
+    if (groundNames.length === 0) { alert("Pick at least 1 ground for the season."); return; }
+    const season = { id: nextId++, name, groundNames, teamIds, groups: [], knockoutRounds: [] };
+    appState.seasons.push(season);
+    seasonsAppActiveSeasonId = season.id;
+    seasonsAppScreen = "detail";
+    seasonsDetailTab = "matches";
+    renderSeasonsApp();
+  };
 }
 
 /** Every played match in a season (groups + knockout rounds), reshaped to
@@ -2340,128 +2455,148 @@ function seasonPlayedMatchRecords(season) {
   return records;
 }
 
-function renderSeasonDetail() {
-  const el = document.getElementById("seasonDetail");
-  if (!currentSeasonView) { el.innerHTML = ""; return; }
-
-  if (currentSeasonView.creating) {
-    const eligibleTeams = appState.teams.filter(t => t.playerIds.length === 11);
-    el.innerHTML = `
-      <div class="panel">
-        <h2>Create Season</h2>
-        <label>Season name <input type="text" id="newSeasonName" value="Season 1" /></label>
-        <p class="hint-text" style="margin-top:10px;">Pick one or more grounds for this tournament — fixtures rotate across them at random, and knockout matches let you pick the exact venue:</p>
-        <div class="tournament-team-checks" id="newSeasonGrounds" style="max-height:220px; overflow-y:auto;">${allGrounds().map(g => `<label><input type="checkbox" value="${g.name}" /> ${g.name}</label>`).join("")}</div>
-        <p class="hint-text" style="margin-top:10px;">Pick participating teams (must be full 11-player squads):</p>
-        <div class="tournament-team-checks">${eligibleTeams.map(t => `<label><input type="checkbox" value="${t.id}" /> ${t.name}</label>`).join("") || '<p class="hint-text">No full teams available yet.</p>'}</div>
-        <div class="modal-actions" style="margin-top:14px;">
-          <button class="btn-primary" id="createSeasonBtn">Create</button>
-          <button class="btn-ghost" id="cancelSeasonBtn">Cancel</button>
-        </div>
-      </div>`;
-    document.getElementById("cancelSeasonBtn").onclick = () => { currentSeasonView = null; renderSeasonDetail(); };
-    document.getElementById("createSeasonBtn").onclick = () => {
-      const name = document.getElementById("newSeasonName").value || "New Season";
-      const groundNames = [...document.querySelectorAll('#newSeasonGrounds input:checked')].map(c => c.value);
-      const teamIds = [...el.querySelectorAll('.tournament-team-checks:not(#newSeasonGrounds) input:checked')].map(c => Number(c.value));
-      if (teamIds.length < 2) { alert("Pick at least 2 teams for the season."); return; }
-      if (groundNames.length === 0) { alert("Pick at least 1 ground for the season."); return; }
-      const season = { id: nextId++, name, groundNames, teamIds, groups: [], knockoutRounds: [] };
-      appState.seasons.push(season);
-      persistState();
-      currentSeasonView = { seasonId: season.id };
-      renderSeasonsTab();
-    };
-    return;
-  }
-
-  const season = getSeason(currentSeasonView.seasonId);
-  if (!season) { currentSeasonView = null; el.innerHTML = ""; return; }
-  // backward-compat: older seasons stored a single groundName instead of an array
+function renderSeasonsAppDetail() {
+  const body = document.getElementById("seasonsAppBody");
+  const season = getSeason(seasonsAppActiveSeasonId);
+  if (!season) { seasonsAppScreen = "home"; renderSeasonsAppHome(); return; }
   if (!season.groundNames) season.groundNames = season.groundName ? [season.groundName] : [allGrounds()[0].name];
   const defaultGround = getGroundByName(season.groundNames[0]) || allGrounds()[0];
   const pitch = { speed: defaultGround.speed ?? 6, grip: defaultGround.grip ?? 5, bounce: defaultGround.bounce ?? 6, variation: defaultGround.variation ?? 5, deterioration: defaultGround.deterioration ?? 5, __groundName: defaultGround.name };
   const totalOvers = 20;
 
-  const groupsHtml = season.groups.map(g => renderGroupCard(season, g, pitch, totalOvers)).join("");
-  const roundsHtml = season.knockoutRounds.map(r => renderKnockoutRoundCard(season, r, pitch, totalOvers)).join("");
-
   const finalRound = season.knockoutRounds[season.knockoutRounds.length - 1];
   const finalMatch = finalRound && finalRound.matches[0];
   const championHtml = (finalMatch && isPlayed(finalMatch))
-    ? `<div class="result-line" style="margin-top:0;">🏆 Champion: ${getTeam(getWinnerId(finalMatch))?.name || "Tied"}</div>`
+    ? `<div class="ps-champion-line" style="margin-bottom:12px;">🏆 Champion: ${getTeam(getWinnerId(finalMatch))?.name || "Tied"}</div>`
     : "";
 
-  const seasonRecords = seasonPlayedMatchRecords(season);
-  const seasonStats = computeAggregateStats(seasonRecords);
-  const seasonMomTally = getMomTallyAllMatches(seasonRecords);
-  const topRuns = [...seasonStats.batting].sort((a, b) => b.runs - a.runs).slice(0, 15);
-  const topWickets = [...seasonStats.bowling].sort((a, b) => b.wickets - a.wickets || a.runs - b.runs).slice(0, 15);
-  const topMom = seasonMomTally.slice(0, 15);
-  const emptyStat = `<p class="ps-empty">No matches played yet this season.</p>`;
-  const seasonStatsHtml = `
-    <div class="ps-card">
-      <div class="ps-card-title">Season Stats</div>
-      <div class="ps-stats-grid">
-        <div class="ps-stat-col">
-          <div class="ps-stat-heading">Top Run Scorers</div>
-          <div class="ps-scroll">
-            ${topRuns.length === 0 ? emptyStat : `<table class="ps-table"><thead><tr><th>#</th><th>Player</th><th>Runs</th><th>SR</th></tr></thead><tbody>
-              ${topRuns.map((b, i) => `<tr><td>${i+1}</td><td>${b.name} <span class="ps-dim">(${b.team})</span></td><td class="ps-mono"><b>${b.runs}</b></td><td class="ps-mono">${((b.runs/Math.max(1,b.balls))*100).toFixed(1)}</td></tr>`).join("")}
-            </tbody></table>`}
-          </div>
-        </div>
-        <div class="ps-stat-col">
-          <div class="ps-stat-heading">Top Wicket Takers</div>
-          <div class="ps-scroll">
-            ${topWickets.length === 0 ? emptyStat : `<table class="ps-table"><thead><tr><th>#</th><th>Player</th><th>Wkts</th><th>Econ</th></tr></thead><tbody>
-              ${topWickets.map((b, i) => `<tr><td>${i+1}</td><td>${b.name} <span class="ps-dim">(${b.team})</span></td><td class="ps-mono"><b>${b.wickets}</b></td><td class="ps-mono">${(b.runs/Math.max(0.1,b.overs)).toFixed(2)}</td></tr>`).join("")}
-            </tbody></table>`}
-          </div>
-        </div>
-        <div class="ps-stat-col">
-          <div class="ps-stat-heading">Most MOM Awards</div>
-          <div class="ps-scroll">
-            ${topMom.length === 0 ? emptyStat : `<table class="ps-table"><thead><tr><th>#</th><th>Player</th><th>MOM</th></tr></thead><tbody>
-              ${topMom.map((p, i) => `<tr><td>${i+1}</td><td>${p.name} <span class="ps-dim">(${p.teamName})</span></td><td class="ps-mono"><b>${p.count}</b></td></tr>`).join("")}
-            </tbody></table>`}
-          </div>
-        </div>
-      </div>
+  const subtabHtml = `
+    <div class="ps-subtab-row">
+      <button class="ps-subtab-btn ${seasonsDetailTab === "matches" ? "active" : ""}" data-subtab="matches">Matches</button>
+      <button class="ps-subtab-btn ${seasonsDetailTab === "stats" ? "active" : ""}" data-subtab="stats">Stats</button>
     </div>`;
 
-  el.innerHTML = `
-    <div class="panel">
-      <div class="panel-header-row"><h2>${season.name}</h2><span class="hint-text">${season.groundNames.join(", ")}</span></div>
-      ${championHtml}
-      <div class="add-to-team-row">
-        <button class="btn-ghost" id="addGroupBtn">+ Add group</button>
-        <button class="btn-ghost" id="addRoundBtn">+ Add knockout round</button>
+  let contentHtml;
+  if (seasonsDetailTab === "matches") {
+    const groupsHtml = season.groups.map(g => renderGroupCard(season, g, pitch, totalOvers)).join("");
+    const roundsHtml = season.knockoutRounds.map(r => renderKnockoutRoundCard(season, r, pitch, totalOvers)).join("");
+    contentHtml = `
+      <div class="ps-card-header-row" style="margin-bottom:12px;">
+        <button class="ps-ghost-btn" id="addGroupBtn">+ Add group</button>
+        <button class="ps-ghost-btn" id="addRoundBtn">+ Add knockout round</button>
       </div>
+      ${groupsHtml}
+      ${roundsHtml}
+      ${season.groups.length === 0 && season.knockoutRounds.length === 0 ? '<p class="ps-empty" style="color:rgba(245,239,220,0.5);">No groups or knockout rounds yet — add one above.</p>' : ""}
+    `;
+  } else {
+    const seasonRecords = seasonPlayedMatchRecords(season);
+    const seasonStats = computeAggregateStats(seasonRecords);
+    const seasonMomTally = getMomTallyAllMatches(seasonRecords);
+    const topRuns = [...seasonStats.batting].sort((a, b) => b.runs - a.runs).slice(0, 15);
+    const topWickets = [...seasonStats.bowling].sort((a, b) => b.wickets - a.wickets || a.runs - b.runs).slice(0, 15);
+    const topMom = seasonMomTally.slice(0, 15);
+    const emptyStat = `<p class="ps-empty">No matches played yet this season.</p>`;
+    contentHtml = `
+      <div class="ps-card">
+        <div class="ps-card-title">Points Table</div>
+        ${season.groups.map(g => {
+          const standings = computeStandings(g.teamIds, g.matches, totalOvers);
+          const rows = standings.map((s, i) => `
+            <tr><td>${i+1}</td><td>${getTeam(s.id)?.name || "?"}</td><td class="ps-mono">${s.played}</td><td class="ps-mono">${s.won}</td>
+            <td class="ps-mono">${s.lost}</td><td class="ps-mono">${s.tied}</td><td class="ps-mono">${s.nrr.toFixed(3)}</td><td class="ps-mono"><b>${s.points}</b></td></tr>`).join("");
+          return `<p class="ps-stat-heading">${g.name}</p><table class="ps-standings-table"><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>NRR</th><th>Pts</th></tr></thead><tbody>${rows}</tbody></table>`;
+        }).join("") || '<p class="ps-empty">No groups yet.</p>'}
+      </div>
+      <div class="ps-card">
+        <div class="ps-card-title">Season Stats</div>
+        <div class="ps-stats-grid">
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Top Run Scorers</div>
+            <div class="ps-scroll">
+              ${topRuns.length === 0 ? emptyStat : `<table class="ps-table"><thead><tr><th>#</th><th>Player</th><th>Runs</th><th>SR</th></tr></thead><tbody>
+                ${topRuns.map((b, i) => `<tr><td>${i+1}</td><td>${b.name} <span class="ps-dim">(${b.team})</span></td><td class="ps-mono"><b>${b.runs}</b></td><td class="ps-mono">${((b.runs/Math.max(1,b.balls))*100).toFixed(1)}</td></tr>`).join("")}
+              </tbody></table>`}
+            </div>
+          </div>
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Top Wicket Takers</div>
+            <div class="ps-scroll">
+              ${topWickets.length === 0 ? emptyStat : `<table class="ps-table"><thead><tr><th>#</th><th>Player</th><th>Wkts</th><th>Econ</th></tr></thead><tbody>
+                ${topWickets.map((b, i) => `<tr><td>${i+1}</td><td>${b.name} <span class="ps-dim">(${b.team})</span></td><td class="ps-mono"><b>${b.wickets}</b></td><td class="ps-mono">${(b.runs/Math.max(0.1,b.overs)).toFixed(2)}</td></tr>`).join("")}
+              </tbody></table>`}
+            </div>
+          </div>
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Most MOM Awards</div>
+            <div class="ps-scroll">
+              ${topMom.length === 0 ? emptyStat : `<table class="ps-table"><thead><tr><th>#</th><th>Player</th><th>MOM</th></tr></thead><tbody>
+                ${topMom.map((p, i) => `<tr><td>${i+1}</td><td>${p.name} <span class="ps-dim">(${p.teamName})</span></td><td class="ps-mono"><b>${p.count}</b></td></tr>`).join("")}
+              </tbody></table>`}
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  body.innerHTML = `
+    <button class="ps-back-btn" id="backToSeasonsHomeBtn">← All seasons</button>
+    <div class="ps-card">
+      <div class="ps-card-header-row" style="margin-bottom:0;">
+        <span class="ps-card-title" style="margin-bottom:0;">${season.name}</span>
+        <span class="ps-dim">${season.groundNames.join(", ")}</span>
+      </div>
+      ${championHtml}
     </div>
-    ${seasonStatsHtml}
-    ${groupsHtml}
-    ${roundsHtml}
+    ${subtabHtml}
+    <div id="seasonsDetailContent">${contentHtml}</div>
   `;
 
-  document.getElementById("addGroupBtn").onclick = () => {
-    const name = prompt("Group name?", `Group ${String.fromCharCode(65 + season.groups.length)}`);
-    if (!name) return;
-    season.groups.push({ id: nextId++, name, teamIds: [...season.teamIds], matches: [] });
-    persistState();
-    renderSeasonDetail();
-  };
-  document.getElementById("addRoundBtn").onclick = () => {
-    const name = prompt("Round name?", season.knockoutRounds.length === 0 ? "Semi Final" : "Final");
-    if (!name) return;
-    season.knockoutRounds.push({ id: nextId++, name, matches: [] });
-    persistState();
-    renderSeasonDetail();
-  };
+  document.getElementById("backToSeasonsHomeBtn").onclick = () => { seasonsAppScreen = "home"; renderSeasonsApp(); };
+  body.querySelectorAll(".ps-subtab-btn").forEach(btn => {
+    btn.onclick = () => { seasonsDetailTab = btn.dataset.subtab; renderSeasonsAppDetail(); };
+  });
 
-  wireGroupCards(season, pitch, totalOvers);
-  wireKnockoutCards(season, pitch, totalOvers);
+  if (seasonsDetailTab === "matches") {
+    document.getElementById("addGroupBtn").onclick = () => {
+      const name = prompt("Group name?", `Group ${String.fromCharCode(65 + season.groups.length)}`);
+      if (!name) return;
+      season.groups.push({ id: nextId++, name, teamIds: [...season.teamIds], matches: [] });
+      persistState();
+      renderSeasonsAppDetail();
+    };
+    document.getElementById("addRoundBtn").onclick = () => {
+      const name = prompt("Round name?", season.knockoutRounds.length === 0 ? "Semi Final" : "Final");
+      if (!name) return;
+      season.knockoutRounds.push({ id: nextId++, name, matches: [] });
+      persistState();
+      renderSeasonsAppDetail();
+    };
+    wireGroupCards(season, pitch, totalOvers);
+    wireKnockoutCards(season, pitch, totalOvers);
+    wireScorecardButtons();
+  }
 }
+
+function wireScorecardButtons() {
+  document.querySelectorAll(".ps-scorecard-btn").forEach(btn => {
+    btn.onclick = () => {
+      const season = getSeason(seasonsAppActiveSeasonId);
+      const allMatches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)];
+      const match = allMatches.find(m => m.id === Number(btn.dataset.matchId));
+      if (!match || !match.fullResult) return;
+      const content = document.getElementById("seasonScorecardContent");
+      const teamA = getTeam(match.team1Id), teamB = getTeam(match.team2Id);
+      renderCompleteScorecard(match.fullResult, { firstTeamColor: teamA?.color || "#E63946", secondTeamColor: teamB?.color || "#1D3557" }, content);
+      document.getElementById("seasonScorecardOverlay").style.display = "flex";
+    };
+  });
+}
+document.getElementById("closeSeasonScorecardBtn").addEventListener("click", () => {
+  document.getElementById("seasonScorecardOverlay").style.display = "none";
+});
+
+
 
 function renderGroupCard(season, group, pitch, totalOvers) {
   const standings = computeStandings(group.teamIds, group.matches, totalOvers);
@@ -2473,7 +2608,7 @@ function renderGroupCard(season, group, pitch, totalOvers) {
     <div class="ps-match-line" data-group-id="${group.id}" data-match-id="${m.id}">
       <b>${getTeam(m.team1Id)?.name}</b> ${formatSeasonScore(m.score1)} vs <b>${getTeam(m.team2Id)?.name}</b> ${formatSeasonScore(m.score2)}
       ${m.groundName ? `<span class="ps-dim">· ${m.groundName}</span>` : ""}
-      ${isPlayed(m) ? "" : `<button class="ps-ghost-btn sim-match-btn" data-group-id="${group.id}" data-match-id="${m.id}">Simulate</button>`}
+      ${isPlayed(m) ? `<button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>` : `<button class="ps-ghost-btn sim-match-btn" data-group-id="${group.id}" data-match-id="${m.id}">Simulate</button>`}
       <button class="ps-remove-btn remove-group-match-btn" data-group-id="${group.id}" data-match-id="${m.id}">Remove</button>
     </div>`).join("");
   const teamOptions = group.teamIds.map(id => `<option value="${id}">${getTeam(id)?.name}</option>`).join("");
@@ -2501,7 +2636,7 @@ function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
     <div class="ps-match-line" data-round-id="${round.id}" data-match-id="${m.id}">
       <b>${getTeam(m.team1Id)?.name}</b> ${formatSeasonScore(m.score1)} vs <b>${getTeam(m.team2Id)?.name}</b> ${formatSeasonScore(m.score2)}
       ${m.groundName ? `<span class="ps-dim">· ${m.groundName}</span>` : ""}
-      ${isPlayed(m) ? (getWinnerId(m) ? `<span class="ps-dim">— ${getTeam(getWinnerId(m))?.name} won</span>` : `<span class="ps-dim">— tied</span>`) : `<button class="ps-ghost-btn sim-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Simulate</button>`}
+      ${isPlayed(m) ? `<span class="ps-dim">${getWinnerId(m) ? getTeam(getWinnerId(m))?.name + " won" : "tied"}</span><button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>` : `<button class="ps-ghost-btn sim-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Simulate</button>`}
       <button class="ps-remove-btn remove-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Remove</button>
     </div>`).join("");
   const teamOptions = season.teamIds.map(id => `<option value="${id}">${getTeam(id)?.name}</option>`).join("");
@@ -2525,7 +2660,7 @@ function wireGroupCards(season, pitch, totalOvers) {
       const group = season.groups.find(g => g.id === Number(btn.dataset.groupId));
       addMissingFixtures(group, season.groundNames);
       persistState();
-      renderSeasonDetail();
+      renderSeasonsAppDetail();
     };
   });
   document.querySelectorAll(".sim-all-btn").forEach(btn => {
@@ -2533,14 +2668,14 @@ function wireGroupCards(season, pitch, totalOvers) {
       const group = season.groups.find(g => g.id === Number(btn.dataset.groupId));
       group.matches.filter(m => !isPlayed(m)).forEach(m => simulateSeasonMatch(m, pitch, totalOvers));
       persistState();
-      renderSeasonDetail();
+      renderSeasonsAppDetail();
     };
   });
   document.querySelectorAll(".sim-match-btn").forEach(btn => {
     btn.onclick = () => {
       const group = season.groups.find(g => g.id === Number(btn.dataset.groupId));
       const match = group.matches.find(m => m.id === Number(btn.dataset.matchId));
-      playSeasonMatchLive(match, pitch, totalOvers, () => { persistState(); renderSeasonDetail(); });
+      playSeasonMatchLive(match, pitch, totalOvers, () => { persistState(); renderSeasonsAppDetail(); });
     };
   });
   document.querySelectorAll(".remove-group-match-btn").forEach(btn => {
@@ -2548,7 +2683,7 @@ function wireGroupCards(season, pitch, totalOvers) {
       const group = season.groups.find(g => g.id === Number(btn.dataset.groupId));
       group.matches = group.matches.filter(m => m.id !== Number(btn.dataset.matchId));
       persistState();
-      renderSeasonDetail();
+      renderSeasonsAppDetail();
     };
   });
   document.querySelectorAll(".add-custom-group-match-btn").forEach(btn => {
@@ -2560,14 +2695,14 @@ function wireGroupCards(season, pitch, totalOvers) {
       if (t1 === t2) { alert("Pick two different teams."); return; }
       group.matches.push(blankSeasonMatch(t1, t2, groundName));
       persistState();
-      renderSeasonDetail();
+      renderSeasonsAppDetail();
     };
   });
   document.querySelectorAll(".remove-group-btn").forEach(btn => {
     btn.onclick = () => {
       season.groups = season.groups.filter(g => g.id !== Number(btn.dataset.groupId));
       persistState();
-      renderSeasonDetail();
+      renderSeasonsAppDetail();
     };
   });
 }
@@ -2582,14 +2717,14 @@ function wireKnockoutCards(season, pitch, totalOvers) {
       if (t1 === t2) { alert("Pick two different teams."); return; }
       round.matches.push(blankSeasonMatch(t1, t2, groundName));
       persistState();
-      renderSeasonDetail();
+      renderSeasonsAppDetail();
     };
   });
   document.querySelectorAll(".sim-ko-match-btn").forEach(btn => {
     btn.onclick = () => {
       const round = season.knockoutRounds.find(r => r.id === Number(btn.dataset.roundId));
       const match = round.matches.find(m => m.id === Number(btn.dataset.matchId));
-      playSeasonMatchLive(match, pitch, totalOvers, () => { persistState(); renderSeasonDetail(); });
+      playSeasonMatchLive(match, pitch, totalOvers, () => { persistState(); renderSeasonsAppDetail(); });
     };
   });
   document.querySelectorAll(".remove-ko-match-btn").forEach(btn => {
@@ -2597,14 +2732,14 @@ function wireKnockoutCards(season, pitch, totalOvers) {
       const round = season.knockoutRounds.find(r => r.id === Number(btn.dataset.roundId));
       round.matches = round.matches.filter(m => m.id !== Number(btn.dataset.matchId));
       persistState();
-      renderSeasonDetail();
+      renderSeasonsAppDetail();
     };
   });
   document.querySelectorAll(".remove-round-btn").forEach(btn => {
     btn.onclick = () => {
       season.knockoutRounds = season.knockoutRounds.filter(r => r.id !== Number(btn.dataset.roundId));
       persistState();
-      renderSeasonDetail();
+      renderSeasonsAppDetail();
     };
   });
 }
