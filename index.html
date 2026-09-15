@@ -857,11 +857,19 @@ function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, power
   }
 
   let candidates = pool.filter(b => !capped(b) && b !== lastOverBowler);
-  if (candidates.length === 0) candidates = pool.filter(b => b !== lastOverBowler);
+  let mustRelaxCap = false;
+  if (candidates.length === 0) { candidates = pool.filter(b => b !== lastOverBowler); mustRelaxCap = true; }
   if (candidates.length === 0) candidates = pool.filter(b => !capped(b));
   if (candidates.length === 0) candidates = pool;
 
-  const bowler = pickWeightedBowler(candidates, over, totalOvers, lastOverRuns);
+  let bowler;
+  if (mustRelaxCap && candidates.length > 1) {
+    const minOvers = Math.min(...candidates.map(b => oversBowledMap.get(b) || 0));
+    const leastUsed = candidates.filter(b => (oversBowledMap.get(b) || 0) === minOvers);
+    bowler = pickWeightedBowler(leastUsed, over, totalOvers, lastOverRuns);
+  } else {
+    bowler = pickWeightedBowler(candidates, over, totalOvers, lastOverRuns);
+  }
   if (powerplayUsed) powerplayUsed.add(bowler);
   return { bowler };
 }
@@ -2223,6 +2231,7 @@ function renderRecordsTab() {
 // auto-simulated fixtures via the engine)
 // ============================================================
 let currentSeasonView = null; // { seasonId, creating }
+let currentSeasonSubTab = "overview"; // "overview" | "prequals" | "groups" | "knockouts"
 
 function getSeason(id) { return appState.seasons.find(s => s.id === id); }
 
@@ -2353,16 +2362,25 @@ function renderGroupCard(season, group, pitch, totalOvers) {
       <b>${getTeam(m.team1Id)?.name}</b> ${formatSeasonScore(m.score1)} vs <b>${getTeam(m.team2Id)?.name}</b> ${formatSeasonScore(m.score2)}
       ${m.groundName ? `<span class="hint-text"> · ${m.groundName}</span>` : ""}
       ${isPlayed(m) ? "" : `<button class="btn-ghost sim-match-btn" data-group-id="${group.id}" data-match-id="${m.id}" style="margin-left:8px;">Simulate</button>`}
+      <button class="sq-remove-btn remove-group-match-btn" data-group-id="${group.id}" data-match-id="${m.id}" style="margin-left:8px;">Remove</button>
     </div>`).join("");
+  const teamOptions = group.teamIds.map(id => `<option value="${id}">${getTeam(id)?.name}</option>`).join("");
+  const groundOptions = season.groundNames.map(name => `<option value="${name}">${name}</option>`).join("");
   return `
     <div class="team-card">
-      <div class="team-card-header"><span style="font-size:20px; font-family:'Oswald',sans-serif; color:var(--pitch-light);">${group.name}</span></div>
+      <div class="team-card-header"><span style="font-size:20px; font-family:'Oswald',sans-serif; color:var(--pitch-light);">${group.name}</span><button class="sq-remove-btn remove-group-btn" data-group-id="${group.id}">Delete group</button></div>
       <div class="add-to-team-row">
         <button class="btn-ghost add-fixtures-btn" data-group-id="${group.id}">Add missing fixtures</button>
         <button class="btn-ghost sim-all-btn" data-group-id="${group.id}">Simulate all pending</button>
       </div>
       <table class="points-table"><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>NRR</th><th>Pts</th></tr></thead><tbody>${standingsRows}</tbody></table>
       ${matchLines || '<p class="hint-text">No fixtures yet.</p>'}
+      <div class="add-to-team-row" style="margin-top:10px;">
+        <select data-role="group-team1" data-group-id="${group.id}">${teamOptions}</select>
+        <select data-role="group-team2" data-group-id="${group.id}">${teamOptions}</select>
+        <select data-role="group-ground" data-group-id="${group.id}">${groundOptions}</select>
+        <button class="btn-ghost add-custom-group-match-btn" data-group-id="${group.id}">Add custom match</button>
+      </div>
     </div>`;
 }
 
@@ -2372,12 +2390,13 @@ function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
       <b>${getTeam(m.team1Id)?.name}</b> ${formatSeasonScore(m.score1)} vs <b>${getTeam(m.team2Id)?.name}</b> ${formatSeasonScore(m.score2)}
       ${m.groundName ? `<span class="hint-text"> · ${m.groundName}</span>` : ""}
       ${isPlayed(m) ? (getWinnerId(m) ? ` — ${getTeam(getWinnerId(m))?.name} won` : " — tied") : `<button class="btn-ghost sim-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}" style="margin-left:8px;">Simulate</button>`}
+      <button class="sq-remove-btn remove-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}" style="margin-left:8px;">Remove</button>
     </div>`).join("");
   const teamOptions = season.teamIds.map(id => `<option value="${id}">${getTeam(id)?.name}</option>`).join("");
   const groundOptions = season.groundNames.map(name => `<option value="${name}">${name}</option>`).join("");
   return `
     <div class="team-card">
-      <div class="team-card-header"><span style="font-size:20px; font-family:'Oswald',sans-serif; color:var(--pitch-light);">${round.name}</span></div>
+      <div class="team-card-header"><span style="font-size:20px; font-family:'Oswald',sans-serif; color:var(--pitch-light);">${round.name}</span><button class="sq-remove-btn remove-round-btn" data-round-id="${round.id}">Delete round</button></div>
       ${matchLines || '<p class="hint-text">No matches yet.</p>'}
       <div class="add-to-team-row">
         <select data-role="ko-team1" data-round-id="${round.id}">${teamOptions}</select>
@@ -2412,6 +2431,33 @@ function wireGroupCards(season, pitch, totalOvers) {
       playSeasonMatchLive(match, pitch, totalOvers, () => { persistState(); renderSeasonDetail(); });
     };
   });
+  document.querySelectorAll(".remove-group-match-btn").forEach(btn => {
+    btn.onclick = () => {
+      const group = season.groups.find(g => g.id === Number(btn.dataset.groupId));
+      group.matches = group.matches.filter(m => m.id !== Number(btn.dataset.matchId));
+      persistState();
+      renderSeasonDetail();
+    };
+  });
+  document.querySelectorAll(".add-custom-group-match-btn").forEach(btn => {
+    btn.onclick = () => {
+      const group = season.groups.find(g => g.id === Number(btn.dataset.groupId));
+      const t1 = Number(document.querySelector(`[data-role="group-team1"][data-group-id="${group.id}"]`).value);
+      const t2 = Number(document.querySelector(`[data-role="group-team2"][data-group-id="${group.id}"]`).value);
+      const groundName = document.querySelector(`[data-role="group-ground"][data-group-id="${group.id}"]`).value;
+      if (t1 === t2) { alert("Pick two different teams."); return; }
+      group.matches.push(blankSeasonMatch(t1, t2, groundName));
+      persistState();
+      renderSeasonDetail();
+    };
+  });
+  document.querySelectorAll(".remove-group-btn").forEach(btn => {
+    btn.onclick = () => {
+      season.groups = season.groups.filter(g => g.id !== Number(btn.dataset.groupId));
+      persistState();
+      renderSeasonDetail();
+    };
+  });
 }
 
 function wireKnockoutCards(season, pitch, totalOvers) {
@@ -2432,6 +2478,21 @@ function wireKnockoutCards(season, pitch, totalOvers) {
       const round = season.knockoutRounds.find(r => r.id === Number(btn.dataset.roundId));
       const match = round.matches.find(m => m.id === Number(btn.dataset.matchId));
       playSeasonMatchLive(match, pitch, totalOvers, () => { persistState(); renderSeasonDetail(); });
+    };
+  });
+  document.querySelectorAll(".remove-ko-match-btn").forEach(btn => {
+    btn.onclick = () => {
+      const round = season.knockoutRounds.find(r => r.id === Number(btn.dataset.roundId));
+      round.matches = round.matches.filter(m => m.id !== Number(btn.dataset.matchId));
+      persistState();
+      renderSeasonDetail();
+    };
+  });
+  document.querySelectorAll(".remove-round-btn").forEach(btn => {
+    btn.onclick = () => {
+      season.knockoutRounds = season.knockoutRounds.filter(r => r.id !== Number(btn.dataset.roundId));
+      persistState();
+      renderSeasonDetail();
     };
   });
 }

@@ -389,11 +389,23 @@ function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, power
   // gets hard-blocked out of an over just because their strongest options
   // happen to be an off-phase type.
   let candidates = pool.filter(b => !capped(b) && b !== lastOverBowler);
-  if (candidates.length === 0) candidates = pool.filter(b => b !== lastOverBowler);
+  let mustRelaxCap = false;
+  if (candidates.length === 0) { candidates = pool.filter(b => b !== lastOverBowler); mustRelaxCap = true; }
   if (candidates.length === 0) candidates = pool.filter(b => !capped(b));
   if (candidates.length === 0) candidates = pool;
 
-  const bowler = pickWeightedBowler(candidates, over, totalOvers, lastOverRuns);
+  let bowler;
+  if (mustRelaxCap && candidates.length > 1) {
+    // the team is genuinely short of overs to legally cover the innings —
+    // spread that shortfall as fairly as possible by preferring whoever
+    // has bowled fewest overs so far, rather than letting raw rating
+    // concentrate the extra overs onto one bowler
+    const minOvers = Math.min(...candidates.map(b => oversBowledMap.get(b) || 0));
+    const leastUsed = candidates.filter(b => (oversBowledMap.get(b) || 0) === minOvers);
+    bowler = pickWeightedBowler(leastUsed, over, totalOvers, lastOverRuns);
+  } else {
+    bowler = pickWeightedBowler(candidates, over, totalOvers, lastOverRuns);
+  }
   if (powerplayUsed) powerplayUsed.add(bowler);
   return { bowler };
 }
