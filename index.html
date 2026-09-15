@@ -423,11 +423,11 @@
   <div class="tab-nav">
     <button class="tab-btn active" data-tab="playerdb">Player DB</button>
     <button class="tab-btn" data-tab="teams">Select Teams</button>
-    <button class="tab-btn" data-tab="tournament">Tournament</button>
     <button class="tab-btn" data-tab="seasons">Seasons</button>
     <button class="tab-btn" data-tab="quickmatch">Quick Match</button>
     <button class="tab-btn" data-tab="stats">Stats &amp; History</button>
     <button class="tab-btn" data-tab="records">Records</button>
+    <button class="tab-btn" data-tab="grounds">Grounds</button>
   </div>
 
   <div id="playerdbTab" class="tab-panel active">
@@ -450,25 +450,6 @@
       <p class="hint-text">Each player can belong to only one team at a time. Remove a player from a team before adding them elsewhere.</p>
       <div id="teamsList"></div>
     </div>
-  </div>
-
-  <div id="tournamentTab" class="tab-panel">
-    <div class="panel">
-      <h2>Tournament Setup</h2>
-      <div id="tournamentTeamPicker"></div>
-    </div>
-    <div class="panel">
-      <h2>Pitch &amp; Match</h2>
-      <div class="field" style="margin-bottom:14px;">
-        <label>Ground</label>
-        <select id="tournamentGroundSelect"></select>
-      </div>
-      <div class="pitch-grid" id="tournamentPitchGrid"></div>
-    </div>
-    <div class="controls-row">
-      <button class="btn-primary" id="runTournamentBtn">Generate &amp; simulate tournament</button>
-    </div>
-    <div id="tournamentResults" style="margin-top:24px;"></div>
   </div>
 
   <div id="seasonsTab" class="tab-panel">
@@ -578,15 +559,25 @@
       <div id="recordsMomTally"></div>
     </div>
     <div class="panel">
-      <h2>Top 10 Batting Scores (Man of the Match performances)</h2>
+      <h2>Top 10 Batting Scores</h2>
       <div id="recordsTopMomBatting"></div>
     </div>
     <div class="panel">
-      <h2>Top 10 Bowling Figures (Man of the Match performances)</h2>
+      <h2>Top 10 Bowling Figures</h2>
       <div id="recordsTopMomBowling"></div>
     </div>
   </div>
 
+  <div id="groundsTab" class="tab-panel">
+    <div class="panel">
+      <div class="panel-header-row">
+        <h2>Grounds</h2>
+        <button class="btn-primary" id="addGroundBtn">+ Add ground</button>
+      </div>
+      <p class="hint-text">Built-in grounds can't be edited, but you can add your own with custom pitch conditions. Any ground here is selectable when setting up a Quick Match or a Season.</p>
+      <div id="groundsList"></div>
+    </div>
+  </div>
 
 </main>
 
@@ -594,6 +585,13 @@
   <div class="modal-box">
     <h2>Player</h2>
     <form id="playerModalForm" onsubmit="return false;"></form>
+  </div>
+</div>
+
+<div id="groundModal" class="modal-overlay">
+  <div class="modal-box">
+    <h2>Ground</h2>
+    <form id="groundModalForm" onsubmit="return false;"></form>
   </div>
 </div>
 
@@ -783,20 +781,39 @@ function getEligibleBowlers(bowlingTeam, totalOvers) {
 
 /** Pure weighted pick from a candidate pool — rating plus phase/style fit. */
 function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns) {
-  const earlyPhase = over < totalOvers * 0.3;
+  const earlyPhase = over < Math.round(totalOvers * 0.4);
   const deathPhase = over >= totalOvers - 4;
   const middlePhase = !earlyPhase && !deathPhase;
+  const isFastStyle = b => b.bowlingStyle === "Right Arm Fast" || b.bowlingStyle === "Left Arm Fast";
   const weights = candidates.map(b => {
     let w = Math.max(1, b.bowling) ** 2;
     const isSp = SPIN_STYLES.includes(b.bowlingStyle);
     const isPace = !isSp && b.bowlingStyle !== "None" && b.bowlingStyle !== "Does Not Bowl";
-    if (earlyPhase) { if (isPace) w *= 1.7; if (isSp) w *= 0.3; }
-    else if (middlePhase) { if (isSp) w *= 1.6; if (isPace) w *= 0.7; }
-    else if (deathPhase) { if (isPace) w *= 1.6; if (isSp) w *= 0.6; }
-    if (b.bowlingSkill === "Specialist Bowler") w *= 1.6;
-    if (b.bowlingSkill === "New Ball Bowler" && earlyPhase) w *= 1.5;
-    if (b.bowlingSkill === "Death/Old Ball Bowler" && deathPhase) w *= 1.5;
-    if (b.bowlingSkill === "Death/Old Ball Bowler" && !deathPhase) w *= 0.18;
+
+    if (earlyPhase) {
+      if (isPace) w *= 1.7;
+      if (isFastStyle(b)) w *= 1.6;
+      if (b.bowlingSkill === "Specialist Bowler" && isPace) w *= 1.8;
+      if (b.bowlingSkill === "New Ball Bowler") w *= 1.7;
+      if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 0.05;
+      if (b.bowlingSkill === "Mystery Spinner") w *= 0.05;
+      if (isSp) w *= 0.3;
+    } else if (middlePhase) {
+      if (isSp) w *= 1.6;
+      if (isPace) w *= 0.7;
+      if (b.bowlingSkill === "Mystery Spinner") w *= 2.2;
+      if (b.bowlingSkill === "Death/Old Ball Bowler" && over >= 11) w *= 1.15;
+    } else if (deathPhase) {
+      if (isPace) w *= 1.6;
+      if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 2.2;
+      if (b.bowlingSkill === "Specialist Bowler" && isPace) w *= 1.6;
+      if (b.bowlingSkill === "New Ball Bowler") w *= 1.4;
+      if (isSp) w *= 0.06;
+    }
+
+    if (b.bowlingSkill === "None") w *= 0.35;
+    if (b.bowlingSkill === "Death/Old Ball Bowler" && earlyPhase) w *= 0.1;
+
     if (lastOverRuns && lastOverRuns.has(b)) {
       const runs = lastOverRuns.get(b);
       if (runs >= 14) w *= 0.35;
@@ -817,11 +834,20 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns) {
  * the middle overs, pace returns at the death — but whoever bowled the
  * previous over is always excluded first, before any type preference,
  * so the same bowler can never go two overs in a row. */
-function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns }) {
-  const maxOversPerBowler = Math.max(1, Math.ceil(totalOvers / 5));
-  const capped = b => (oversBowledMap.get(b) || 0) >= maxOversPerBowler;
+function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler }) {
+  const generalMax = Math.max(1, Math.ceil(totalOvers / 5));
+  const capped = b => (oversBowledMap.get(b) || 0) >= (b.bowlingSkill === "None" ? Math.min(2, generalMax) : generalMax);
   const isPowerplay = over < Math.min(4, totalOvers);
   const isPaceStyle = b => !SPIN_STYLES.includes(b.bowlingStyle) && b.bowlingStyle !== "None" && b.bowlingStyle !== "Does Not Bowl";
+  const deathPhase = over >= totalOvers - 4;
+
+  if (reservedDeathBowler && !deathPhase && !capped(reservedDeathBowler)) {
+    const oversLeft = generalMax - (oversBowledMap.get(reservedDeathBowler) || 0);
+    if (oversLeft <= 2) {
+      const withoutReserved = eligible.filter(b => b !== reservedDeathBowler);
+      if (withoutReserved.length > 0) eligible = withoutReserved;
+    }
+  }
 
   function buildPool(preferred, extraFreshFilter) {
     const notCapped = b => !capped(b);
@@ -872,6 +898,10 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
   const battingDayFactor = rollBattingDayFactor();
   const extrasByType = { wide: 0, noball: 0, bye: 0 };
   const { eligible, maxOversPerBowler } = getEligibleBowlers(bowlingTeam, totalOvers);
+  const deathCandidates = eligible.filter(b => b.bowlingSkill === "Specialist Bowler" || b.bowlingSkill === "Death/Old Ball Bowler");
+  const reservedDeathBowler = deathCandidates.length
+    ? deathCandidates.reduce((best, b) => (b.bowling > best.bowling ? b : best))
+    : null;
   let ballsBowled = 0;
   const bowlerBallsSelf = new Map();
   const bowlerFullOvers = new Map();
@@ -884,7 +914,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
   const BYE_CHANCE = 0.02;
 
   for (let over = 0; over < totalOvers && wickets < 10 && strikerIdx < battingTeam.length && (target == null || runs < target); over++) {
-    const choice = chooseBowlerForOver({ eligible, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns });
+    const choice = chooseBowlerForOver({ eligible, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler });
     const bowler = choice.bowler;
     const bowlerLog = bowlingLog[bowlingTeam.indexOf(bowler)];
     if (!bowlerBallsSelf.has(bowler)) bowlerBallsSelf.set(bowler, 0);
@@ -1213,13 +1243,33 @@ const PRESET_GROUNDS = [
   { name: "Newlands, Cape Town", speed: 7, grip: 4, bounce: 8, variation: 4, deterioration: 4 },
   { name: "Old Trafford, Manchester", speed: 6, grip: 5, bounce: 5, variation: 5, deterioration: 5 },
   { name: "Dubai International Stadium", speed: 4, grip: 6, bounce: 5, variation: 5, deterioration: 6 },
+  { name: "Narendra Modi Stadium, Ahmedabad", speed: 7, grip: 3, bounce: 7, variation: 3, deterioration: 4 },
+  { name: "Perth Stadium", speed: 8, grip: 2, bounce: 8, variation: 3, deterioration: 3 },
+  { name: "Kensington Oval, Barbados", speed: 6, grip: 4, bounce: 6, variation: 4, deterioration: 4 },
+  { name: "The Wanderers, Johannesburg", speed: 8, grip: 3, bounce: 7, variation: 3, deterioration: 4 },
+  { name: "R Premadasa Stadium, Colombo", speed: 4, grip: 7, bounce: 4, variation: 6, deterioration: 7 },
+  { name: "Sharjah Cricket Stadium", speed: 4, grip: 6, bounce: 5, variation: 5, deterioration: 6 },
+  { name: "Basin Reserve, Wellington", speed: 6, grip: 4, bounce: 6, variation: 5, deterioration: 4 },
+  { name: "Gaddafi Stadium, Lahore", speed: 5, grip: 6, bounce: 5, variation: 5, deterioration: 6 },
+  { name: "Arun Jaitley Stadium, Delhi", speed: 5, grip: 5, bounce: 5, variation: 5, deterioration: 5 },
+  { name: "Providence Stadium, Guyana", speed: 6, grip: 5, bounce: 6, variation: 5, deterioration: 5 },
   { name: "Custom", speed: null, grip: null, bounce: null, variation: null, deterioration: null },
 ];
+
+/** Every ground a select/checkbox list can offer: built-in presets (real
+ * grounds only, not the "Custom" placeholder) plus any grounds the user
+ * has added themselves. */
+function allGrounds() {
+  return [...PRESET_GROUNDS.filter(g => g.name !== "Custom"), ...appState.grounds];
+}
+function getGroundByName(name) {
+  return allGrounds().find(g => g.name === name) || null;
+}
 
 const STORAGE_KEY = "matchsim_appstate_v1";
 const CURRENT_MATCH_KEY = "matchsim_currentmatch_v1";
 
-const appState = { players: [], teams: [], matches: [], seasons: [] };
+const appState = { players: [], teams: [], matches: [], seasons: [], grounds: [] };
 
 function seedDefaultData() {
   appState.players = [
@@ -1257,6 +1307,7 @@ function loadPersistedState() {
     appState.teams = data.appState.teams || [];
     appState.matches = data.appState.matches || [];
     appState.seasons = data.appState.seasons || [];
+    appState.grounds = data.appState.grounds || [];
     if (typeof data.nextId === "number") nextId = data.nextId;
     return true;
   } catch (e) {
@@ -1284,10 +1335,10 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.classList.add("active");
     document.getElementById(btn.dataset.tab + "Tab").classList.add("active");
     if (btn.dataset.tab === "teams") renderTeamsTab();
-    if (btn.dataset.tab === "tournament") renderTournamentTab();
     if (btn.dataset.tab === "quickmatch") renderQuickMatchTab();
     if (btn.dataset.tab === "stats") renderStatsTab();
     if (btn.dataset.tab === "records") renderRecordsTab();
+    if (btn.dataset.tab === "grounds") renderGroundsTab();
     if (btn.dataset.tab === "seasons") renderSeasonsTab();
   });
 });
@@ -1326,17 +1377,16 @@ function readPitchGrid(idSuffix) {
   };
 }
 
-document.getElementById("tournamentPitchGrid").innerHTML = buildPitchGridHtml("tournament");
 document.getElementById("quickPitchGrid").innerHTML = buildPitchGridHtml("quickmatch");
-wirePitchGrid("tournament");
 wirePitchGrid("quickmatch");
 
 function wireGroundSelect(selectId, idSuffix) {
   const select = document.getElementById(selectId);
-  select.innerHTML = PRESET_GROUNDS.map(g => `<option value="${g.name}">${g.name}</option>`).join("");
+  select.innerHTML = PRESET_GROUNDS.map(g => `<option value="${g.name}">${g.name}</option>`).join("")
+    + (appState.grounds.length ? `<optgroup label="Your grounds">${appState.grounds.map(g => `<option value="${g.name}">${g.name}</option>`).join("")}</optgroup>` : "");
   select.value = "Custom";
   select.addEventListener("change", () => {
-    const ground = PRESET_GROUNDS.find(g => g.name === select.value);
+    const ground = getGroundByName(select.value) || PRESET_GROUNDS.find(g => g.name === select.value);
     if (!ground || ground.speed == null) return; // "Custom" — leave sliders as the user has them
     ["speed", "grip", "bounce", "variation", "deterioration"].forEach(key => {
       const input = document.getElementById(key + "_" + idSuffix);
@@ -1347,7 +1397,6 @@ function wireGroundSelect(selectId, idSuffix) {
   });
 }
 wireGroundSelect("quickGroundSelect", "quickmatch");
-wireGroundSelect("tournamentGroundSelect", "tournament");
 
 // ============================================================
 // Player DB tab
@@ -1426,6 +1475,89 @@ function renderPlayerDbList() {
 
 document.getElementById("addPlayerBtn").addEventListener("click", () => openPlayerModal(null));
 document.getElementById("playerSearchInput").addEventListener("input", () => renderPlayerDbList());
+
+// ============================================================
+// Grounds tab
+// ============================================================
+function renderGroundsTab() {
+  persistState();
+  const list = document.getElementById("groundsList");
+  const presetRows = PRESET_GROUNDS.filter(g => g.name !== "Custom").map(g => `
+    <div class="sq-player-card">
+      <div class="sq-card-body">
+        <span class="sq-card-name">${g.name}</span>
+        <span class="sq-card-meta">Speed ${g.speed} · Grip ${g.grip} · Bounce ${g.bounce} · Variation ${g.variation} · Deterioration ${g.deterioration}</span>
+      </div>
+      <span class="hint-text" style="flex-shrink:0;">Built-in</span>
+    </div>`).join("");
+  const customRows = appState.grounds.map((g, idx) => `
+    <div class="sq-player-card" data-ground-idx="${idx}">
+      <div class="sq-card-body">
+        <span class="sq-card-name">${g.name}</span>
+        <span class="sq-card-meta">Speed ${g.speed} · Grip ${g.grip} · Bounce ${g.bounce} · Variation ${g.variation} · Deterioration ${g.deterioration}</span>
+      </div>
+      <button class="edit-player-btn edit-ground-btn" data-ground-idx="${idx}">Edit</button>
+      <button class="sq-remove-btn remove-ground-btn" data-ground-idx="${idx}">Remove</button>
+    </div>`).join("");
+
+  list.innerHTML = `
+    <p class="hint-text" style="margin-top:14px; margin-bottom:6px;">Built-in grounds</p>
+    <div class="player-list">${presetRows}</div>
+    <p class="hint-text" style="margin-top:18px; margin-bottom:6px;">Your grounds</p>
+    <div class="player-list">${customRows || '<p class="hint-text">No custom grounds yet — add one above.</p>'}</div>
+  `;
+
+  list.querySelectorAll(".edit-ground-btn").forEach(btn => {
+    btn.addEventListener("click", () => openGroundModal(appState.grounds[Number(btn.dataset.groundIdx)]));
+  });
+  list.querySelectorAll(".remove-ground-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      appState.grounds.splice(Number(btn.dataset.groundIdx), 1);
+      renderGroundsTab();
+    });
+  });
+}
+
+function openGroundModal(ground) {
+  const isNew = !ground;
+  const modal = document.getElementById("groundModal");
+  const form = document.getElementById("groundModalForm");
+  const g = ground || { name: "", speed: 6, grip: 5, bounce: 6, variation: 5, deterioration: 5 };
+
+  form.innerHTML = `
+    <label>Ground name <input type="text" data-role="gname" value="${g.name}" placeholder="e.g. My Home Ground" /></label>
+    <label>Speed <input type="number" data-role="gspeed" value="${g.speed}" min="1" max="10" /></label>
+    <label>Grip <input type="number" data-role="ggrip" value="${g.grip}" min="1" max="10" /></label>
+    <label>Bounce <input type="number" data-role="gbounce" value="${g.bounce}" min="1" max="10" /></label>
+    <label>Variation <input type="number" data-role="gvariation" value="${g.variation}" min="1" max="10" /></label>
+    <label>Deterioration <input type="number" data-role="gdeterioration" value="${g.deterioration}" min="1" max="10" /></label>
+    <div class="modal-actions">
+      <button type="button" class="btn-primary" id="saveGroundBtn">${isNew ? "Add ground" : "Save changes"}</button>
+      <button type="button" class="btn-ghost" id="cancelGroundBtn">Cancel</button>
+    </div>`;
+
+  modal.style.display = "flex";
+  document.getElementById("cancelGroundBtn").addEventListener("click", () => { modal.style.display = "none"; });
+  document.getElementById("saveGroundBtn").addEventListener("click", () => {
+    const get = role => form.querySelector(`[data-role="${role}"]`).value;
+    const name = get("gname").trim();
+    if (!name) { alert("Give the ground a name."); return; }
+    if (allGrounds().some(existing => existing.name === name && existing !== ground)) {
+      alert("A ground with that name already exists — pick a different name.");
+      return;
+    }
+    const updated = {
+      name,
+      speed: Number(get("gspeed")) || 5, grip: Number(get("ggrip")) || 5, bounce: Number(get("gbounce")) || 5,
+      variation: Number(get("gvariation")) || 5, deterioration: Number(get("gdeterioration")) || 5,
+    };
+    if (isNew) appState.grounds.push(updated);
+    else Object.assign(ground, updated);
+    modal.style.display = "none";
+    renderGroundsTab();
+  });
+}
+document.getElementById("addGroundBtn").addEventListener("click", () => openGroundModal(null));
 
 function openPlayerModal(player) {
   const isNew = !player;
@@ -1648,88 +1780,6 @@ function renderTeamsTab() {
 }
 
 // ============================================================
-// Tournament tab
-// ============================================================
-function renderTournamentTab() {
-  const picker = document.getElementById("tournamentTeamPicker");
-  const eligible = appState.teams.filter(t => t.playerIds.length === 11);
-  if (eligible.length < 2) {
-    picker.innerHTML = `<p class="hint-text">You need at least 2 full 11-player teams. Build them in "Select Teams" first.</p>`;
-    return;
-  }
-  picker.innerHTML = `<div class="tournament-team-checks">${
-    eligible.map(t => `<label><input type="checkbox" value="${t.id}" checked /> ${t.name}</label>`).join("")
-  }</div>`;
-}
-
-document.getElementById("runTournamentBtn").addEventListener("click", () => {
-  const checked = [...document.querySelectorAll('#tournamentTeamPicker input[type="checkbox"]:checked')];
-  const teamIds = checked.map(c => Number(c.value));
-  if (teamIds.length < 2) {
-    alert("Pick at least 2 teams to run a tournament.");
-    return;
-  }
-  const teams = teamIds.map(getTeam);
-  const pitch = readPitchGrid("tournament");
-  const totalOvers = Number(document.getElementById("overs_tournament").value) || 20;
-  const groundName = document.getElementById("tournamentGroundSelect").value;
-  const tournamentId = nextId++;
-
-  // round-robin: every team plays every other team once
-  const standings = new Map(teams.map(t => [t.id, { team: t, played: 0, won: 0, lost: 0, tied: 0, points: 0 }]));
-  const matchLines = [];
-  for (let i = 0; i < teams.length; i++) {
-    for (let j = i + 1; j < teams.length; j++) {
-      const teamA = teams[i], teamB = teams[j];
-      const result = simulateMatch({
-        teamA: teamPlayers(teamA), teamB: teamPlayers(teamB), pitch, totalOvers,
-        teamAName: teamA.name, teamBName: teamB.name,
-      });
-      const sA = standings.get(teamA.id), sB = standings.get(teamB.id);
-      sA.played++; sB.played++;
-      const firstIsA = result.firstTeamName === teamA.name;
-      const firstStanding = firstIsA ? sA : sB;
-      const secondStanding = firstIsA ? sB : sA;
-      const firstAllOut = result.first.wickets >= 10;
-      const secondAllOut = result.second.wickets >= 10;
-      if (result.margin === "Match tied") {
-        sA.tied++; sB.tied++; sA.points++; sB.points++;
-      } else if (result.second.runs >= result.first.runs + 1) {
-        secondStanding.won++; firstStanding.lost++; secondStanding.points += 2;
-      } else {
-        firstStanding.won++; secondStanding.lost++; firstStanding.points += 2;
-      }
-      matchLines.push(`<div class="match-result-line"><b>${result.firstTeamName}</b> ${result.first.scoreText} vs <b>${result.secondTeamName}</b> ${result.second.scoreText} — ${result.margin}</div>`);
-      recordMatch({
-        groundName, teamAName: teamA.name, teamBName: teamB.name,
-        teamAColor: teamA.color, teamBColor: teamB.color, result, tournamentId,
-      });
-    }
-  }
-
-  const rows = [...standings.values()].sort((a, b) => b.points - a.points || b.won - a.won);
-  const tableHtml = `
-    <table class="points-table">
-      <thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>Pts</th></tr></thead>
-      <tbody>${rows.map((r, i) => `
-        <tr><td>${i+1}</td><td>${r.team.name}</td><td>${r.played}</td><td>${r.won}</td><td>${r.lost}</td><td>${r.tied}</td><td><b>${r.points}</b></td></tr>
-      `).join("")}</tbody>
-    </table>`;
-
-  const tournamentMatches = appState.matches.filter(m => m.tournamentId === tournamentId);
-  const statsHtml = renderStatsTables(computeAggregateStats(tournamentMatches));
-
-  document.getElementById("tournamentResults").innerHTML = `
-    <h2 style="font-family:'Oswald',sans-serif;color:var(--amber);font-size:22px;">Points Table</h2>
-    ${tableHtml}
-    <h2 style="font-family:'Oswald',sans-serif;color:var(--amber);font-size:22px;">Tournament Stats</h2>
-    ${statsHtml}
-    <h2 style="font-family:'Oswald',sans-serif;color:var(--amber);font-size:22px;">Match Results</h2>
-    ${matchLines.join("")}
-  `;
-});
-
-// ============================================================
 // Quick Match tab
 // ============================================================
 function renderQuickMatchTab() {
@@ -1753,9 +1803,9 @@ function renderQuickMatchTab() {
 // structure of the standalone Pitchside tournament manager, but with
 // every fixture auto-simulated by the engine instead of typed in by hand.
 // ============================================================
-function blankSeasonMatch(team1Id, team2Id) {
+function blankSeasonMatch(team1Id, team2Id, groundName) {
   return {
-    id: nextId++, team1Id, team2Id, battingFirstId: team1Id,
+    id: nextId++, team1Id, team2Id, battingFirstId: team1Id, groundName: groundName || null,
     score1: { runs: "", wkts: "", overs: "", allOut: false },
     score2: { runs: "", wkts: "", overs: "", allOut: false },
     mom: "", tieWinnerId: null, fullResult: null,
@@ -1819,24 +1869,41 @@ function computeStandings(teamIds, matches, matchOvers) {
   return rows;
 }
 /** Adds one round-robin fixture per new pair of teams — never duplicates a
- * pairing that already has a match in this group. */
-function addMissingFixtures(group) {
+ * pairing that already has a match in this group. Each fixture gets a
+ * random venue from the season's selected grounds, matching how a real
+ * multi-venue tournament rotates its fixtures across host grounds. */
+function addMissingFixtures(group, seasonGroundNames) {
   const existing = new Set(group.matches.map(m => [m.team1Id, m.team2Id].sort().join("|")));
+  const grounds = seasonGroundNames && seasonGroundNames.length ? seasonGroundNames : [null];
   for (let i = 0; i < group.teamIds.length; i++) {
     for (let j = i + 1; j < group.teamIds.length; j++) {
       const key = [group.teamIds[i], group.teamIds[j]].sort().join("|");
-      if (!existing.has(key)) group.matches.push(blankSeasonMatch(group.teamIds[i], group.teamIds[j]));
+      if (!existing.has(key)) {
+        const groundName = grounds[Math.floor(Math.random() * grounds.length)];
+        group.matches.push(blankSeasonMatch(group.teamIds[i], group.teamIds[j], groundName));
+      }
     }
   }
 }
 /** Runs a season match through the simulation engine and fills in its
  * score/mom/battingFirstId — the same shape as a hand-entered result. */
+/** Resolves the pitch for one specific match — its own assigned ground if
+ * it has one, otherwise falls back to the season-default pitch passed in. */
+function pitchForMatch(match, fallbackPitch) {
+  if (match.groundName) {
+    const g = getGroundByName(match.groundName);
+    if (g) return { speed: g.speed, grip: g.grip, bounce: g.bounce, variation: g.variation, deterioration: g.deterioration, __groundName: g.name };
+  }
+  return fallbackPitch;
+}
+
 /** Live, ball-by-ball version of a season match — same simulation and
  * same playback the Quick Match tab uses, just shown in an overlay so it
  * can be triggered from anywhere in the Seasons tab. Applies the match's
  * score fields and records it to history only once the reveal finishes,
  * matching how Quick Match behaves. */
-function playSeasonMatchLive(match, pitch, totalOvers, onDone) {
+function playSeasonMatchLive(match, seasonPitch, totalOvers, onDone) {
+  const pitch = pitchForMatch(match, seasonPitch);
   const teamA = getTeam(match.team1Id), teamB = getTeam(match.team2Id);
   const result = simulateMatch({
     teamA: teamPlayers(teamA), teamB: teamPlayers(teamB), pitch, totalOvers,
@@ -1878,7 +1945,8 @@ function playSeasonMatchLive(match, pitch, totalOvers, onDone) {
   });
 }
 
-function simulateSeasonMatch(match, pitch, totalOvers) {
+function simulateSeasonMatch(match, seasonPitch, totalOvers) {
+  const pitch = pitchForMatch(match, seasonPitch);
   const teamA = getTeam(match.team1Id), teamB = getTeam(match.team2Id);
   const result = simulateMatch({
     teamA: teamPlayers(teamA), teamB: teamPlayers(teamB), pitch, totalOvers,
@@ -2076,27 +2144,29 @@ function getMomTallyAllMatches(matches) {
   });
   return Object.values(counts).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }
-function getTopMomBatting(matches, n, teamFilter) {
+function getTopBattingPerformances(matches, n, teamFilter) {
   const rows = [];
   matches.forEach(m => {
-    const motm = m.result.motm;
-    if (!motm) return;
-    if (teamFilter && motm.teamName !== teamFilter) return;
-    const bLog = [...m.result.first.battingLog, ...m.result.second.battingLog].find(b => b.name === motm.name && b.balls > 0);
-    if (!bLog) return;
-    rows.push({ name: motm.name, teamName: motm.teamName, runs: bLog.runs, balls: bLog.balls, out: bLog.out, match: m });
+    const r = m.result;
+    [[r.firstTeamName, r.first.battingLog], [r.secondTeamName, r.second.battingLog]].forEach(([teamName, log]) => {
+      if (teamFilter && teamName !== teamFilter) return;
+      log.forEach(b => {
+        if (b.balls > 0) rows.push({ name: b.name, teamName, runs: b.runs, balls: b.balls, out: b.out, match: m });
+      });
+    });
   });
-  return rows.sort((a, b) => b.runs - a.runs).slice(0, n);
+  return rows.sort((a, b) => b.runs - a.runs || a.balls - b.balls).slice(0, n);
 }
-function getTopMomBowling(matches, n, teamFilter) {
+function getTopBowlingPerformances(matches, n, teamFilter) {
   const rows = [];
   matches.forEach(m => {
-    const motm = m.result.motm;
-    if (!motm) return;
-    if (teamFilter && motm.teamName !== teamFilter) return;
-    const bwLog = [...m.result.first.bowlingLog, ...m.result.second.bowlingLog].find(b => b.name === motm.name && b.overs > 0);
-    if (!bwLog) return;
-    rows.push({ name: motm.name, teamName: motm.teamName, wickets: bwLog.wickets, runs: bwLog.runs, overs: bwLog.overs, match: m });
+    const r = m.result;
+    [[r.firstTeamName, r.first.bowlingLog], [r.secondTeamName, r.second.bowlingLog]].forEach(([teamName, log]) => {
+      if (teamFilter && teamName !== teamFilter) return;
+      log.forEach(b => {
+        if (b.overs > 0) rows.push({ name: b.name, teamName, wickets: b.wickets, runs: b.runs, overs: b.overs, match: m });
+      });
+    });
   });
   return rows.sort((a, b) => b.wickets - a.wickets || a.runs - b.runs).slice(0, n);
 }
@@ -2159,12 +2229,12 @@ function renderRecordsTab() {
     <table class="points-table"><thead><tr><th>#</th><th>Player</th><th>Team</th><th>MOM</th></tr></thead>
     <tbody>${momTally.map((p, i) => `<tr><td>${i+1}</td><td>${p.name}</td><td>${p.teamName}</td><td class="mono"><b>${p.count}</b></td></tr>`).join("")}</tbody></table>`;
 
-  const topMomBatting = getTopMomBatting(matches, 10);
-  document.getElementById("recordsTopMomBatting").innerHTML = topMomBatting.length === 0 ? empty : topMomBatting.map((b, idx) =>
+  const topBatting = getTopBattingPerformances(matches, 10);
+  document.getElementById("recordsTopMomBatting").innerHTML = topBatting.length === 0 ? empty : topBatting.map((b, idx) =>
     `<div class="match-result-line">${idx+1}. <b>${b.name}</b> (${b.teamName}) — ${b.runs}${b.out ? "" : "*"} (${b.balls})</div>`).join("");
 
-  const topMomBowling = getTopMomBowling(matches, 10);
-  document.getElementById("recordsTopMomBowling").innerHTML = topMomBowling.length === 0 ? empty : topMomBowling.map((b, idx) =>
+  const topBowling = getTopBowlingPerformances(matches, 10);
+  document.getElementById("recordsTopMomBowling").innerHTML = topBowling.length === 0 ? empty : topBowling.map((b, idx) =>
     `<div class="match-result-line">${idx+1}. <b>${b.name}</b> (${b.teamName}) — ${b.wickets}/${b.runs} (${formatOvers(b.overs)} ov)</div>`).join("");
 }
 
@@ -2218,7 +2288,8 @@ function renderSeasonDetail() {
       <div class="panel">
         <h2>Create Season</h2>
         <label>Season name <input type="text" id="newSeasonName" value="Season 1" /></label>
-        <label style="margin-top:10px;">Ground <select id="newSeasonGround">${PRESET_GROUNDS.map(g => `<option value="${g.name}">${g.name}</option>`).join("")}</select></label>
+        <p class="hint-text" style="margin-top:10px;">Pick one or more grounds for this tournament — fixtures rotate across them at random, and knockout matches let you pick the exact venue:</p>
+        <div class="tournament-team-checks" id="newSeasonGrounds" style="max-height:220px; overflow-y:auto;">${allGrounds().map(g => `<label><input type="checkbox" value="${g.name}" /> ${g.name}</label>`).join("")}</div>
         <p class="hint-text" style="margin-top:10px;">Pick participating teams (must be full 11-player squads):</p>
         <div class="tournament-team-checks">${eligibleTeams.map(t => `<label><input type="checkbox" value="${t.id}" /> ${t.name}</label>`).join("") || '<p class="hint-text">No full teams available yet.</p>'}</div>
         <div class="modal-actions" style="margin-top:14px;">
@@ -2229,10 +2300,11 @@ function renderSeasonDetail() {
     document.getElementById("cancelSeasonBtn").onclick = () => { currentSeasonView = null; renderSeasonDetail(); };
     document.getElementById("createSeasonBtn").onclick = () => {
       const name = document.getElementById("newSeasonName").value || "New Season";
-      const groundName = document.getElementById("newSeasonGround").value;
-      const teamIds = [...el.querySelectorAll('.tournament-team-checks input:checked')].map(c => Number(c.value));
+      const groundNames = [...document.querySelectorAll('#newSeasonGrounds input:checked')].map(c => c.value);
+      const teamIds = [...el.querySelectorAll('.tournament-team-checks:not(#newSeasonGrounds) input:checked')].map(c => Number(c.value));
       if (teamIds.length < 2) { alert("Pick at least 2 teams for the season."); return; }
-      const season = { id: nextId++, name, groundName, teamIds, groups: [], knockoutRounds: [] };
+      if (groundNames.length === 0) { alert("Pick at least 1 ground for the season."); return; }
+      const season = { id: nextId++, name, groundNames, teamIds, groups: [], knockoutRounds: [] };
       appState.seasons.push(season);
       persistState();
       currentSeasonView = { seasonId: season.id };
@@ -2243,8 +2315,10 @@ function renderSeasonDetail() {
 
   const season = getSeason(currentSeasonView.seasonId);
   if (!season) { currentSeasonView = null; el.innerHTML = ""; return; }
-  const ground = PRESET_GROUNDS.find(g => g.name === season.groundName) || PRESET_GROUNDS[PRESET_GROUNDS.length - 1];
-  const pitch = { speed: ground.speed ?? 6, grip: ground.grip ?? 5, bounce: ground.bounce ?? 6, variation: ground.variation ?? 5, deterioration: ground.deterioration ?? 5, __groundName: season.groundName };
+  // backward-compat: older seasons stored a single groundName instead of an array
+  if (!season.groundNames) season.groundNames = season.groundName ? [season.groundName] : [allGrounds()[0].name];
+  const defaultGround = getGroundByName(season.groundNames[0]) || allGrounds()[0];
+  const pitch = { speed: defaultGround.speed ?? 6, grip: defaultGround.grip ?? 5, bounce: defaultGround.bounce ?? 6, variation: defaultGround.variation ?? 5, deterioration: defaultGround.deterioration ?? 5, __groundName: defaultGround.name };
   const totalOvers = 20;
 
   const groupsHtml = season.groups.map(g => renderGroupCard(season, g, pitch, totalOvers)).join("");
@@ -2258,7 +2332,7 @@ function renderSeasonDetail() {
 
   el.innerHTML = `
     <div class="panel">
-      <div class="panel-header-row"><h2>${season.name}</h2><span class="hint-text">${season.groundName}</span></div>
+      <div class="panel-header-row"><h2>${season.name}</h2><span class="hint-text">${season.groundNames.join(", ")}</span></div>
       ${championHtml}
       <div class="add-to-team-row">
         <button class="btn-ghost" id="addGroupBtn">+ Add group</button>
@@ -2297,6 +2371,7 @@ function renderGroupCard(season, group, pitch, totalOvers) {
   const matchLines = group.matches.map(m => `
     <div class="match-result-line" data-group-id="${group.id}" data-match-id="${m.id}">
       <b>${getTeam(m.team1Id)?.name}</b> ${formatSeasonScore(m.score1)} vs <b>${getTeam(m.team2Id)?.name}</b> ${formatSeasonScore(m.score2)}
+      ${m.groundName ? `<span class="hint-text"> · ${m.groundName}</span>` : ""}
       ${isPlayed(m) ? "" : `<button class="btn-ghost sim-match-btn" data-group-id="${group.id}" data-match-id="${m.id}" style="margin-left:8px;">Simulate</button>`}
     </div>`).join("");
   return `
@@ -2315,9 +2390,11 @@ function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
   const matchLines = round.matches.map(m => `
     <div class="match-result-line" data-round-id="${round.id}" data-match-id="${m.id}">
       <b>${getTeam(m.team1Id)?.name}</b> ${formatSeasonScore(m.score1)} vs <b>${getTeam(m.team2Id)?.name}</b> ${formatSeasonScore(m.score2)}
+      ${m.groundName ? `<span class="hint-text"> · ${m.groundName}</span>` : ""}
       ${isPlayed(m) ? (getWinnerId(m) ? ` — ${getTeam(getWinnerId(m))?.name} won` : " — tied") : `<button class="btn-ghost sim-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}" style="margin-left:8px;">Simulate</button>`}
     </div>`).join("");
   const teamOptions = season.teamIds.map(id => `<option value="${id}">${getTeam(id)?.name}</option>`).join("");
+  const groundOptions = season.groundNames.map(name => `<option value="${name}">${name}</option>`).join("");
   return `
     <div class="team-card">
       <div class="team-card-header"><span style="font-size:20px; font-family:'Oswald',sans-serif; color:var(--pitch-light);">${round.name}</span></div>
@@ -2325,6 +2402,7 @@ function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
       <div class="add-to-team-row">
         <select data-role="ko-team1" data-round-id="${round.id}">${teamOptions}</select>
         <select data-role="ko-team2" data-round-id="${round.id}">${teamOptions}</select>
+        <select data-role="ko-ground" data-round-id="${round.id}">${groundOptions}</select>
         <button class="btn-ghost add-ko-match-btn" data-round-id="${round.id}">Add match</button>
       </div>
     </div>`;
@@ -2334,7 +2412,7 @@ function wireGroupCards(season, pitch, totalOvers) {
   document.querySelectorAll(".add-fixtures-btn").forEach(btn => {
     btn.onclick = () => {
       const group = season.groups.find(g => g.id === Number(btn.dataset.groupId));
-      addMissingFixtures(group);
+      addMissingFixtures(group, season.groundNames);
       persistState();
       renderSeasonDetail();
     };
@@ -2362,8 +2440,9 @@ function wireKnockoutCards(season, pitch, totalOvers) {
       const round = season.knockoutRounds.find(r => r.id === Number(btn.dataset.roundId));
       const t1 = Number(document.querySelector(`[data-role="ko-team1"][data-round-id="${round.id}"]`).value);
       const t2 = Number(document.querySelector(`[data-role="ko-team2"][data-round-id="${round.id}"]`).value);
+      const groundName = document.querySelector(`[data-role="ko-ground"][data-round-id="${round.id}"]`).value;
       if (t1 === t2) { alert("Pick two different teams."); return; }
-      round.matches.push(blankSeasonMatch(t1, t2));
+      round.matches.push(blankSeasonMatch(t1, t2, groundName));
       persistState();
       renderSeasonDetail();
     };
@@ -2402,6 +2481,7 @@ document.getElementById("importDbFile").addEventListener("change", (e) => {
       appState.teams = data.teams;
       appState.matches = data.matches || [];
       appState.seasons = data.seasons || [];
+      appState.grounds = data.grounds || [];
       const maxId = Math.max(0, ...appState.players.map(p => p.id), ...appState.teams.map(t => t.id), ...appState.matches.map(m => m.id));
       nextId = maxId + 1;
       renderPlayerDb();
