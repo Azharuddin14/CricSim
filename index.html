@@ -266,6 +266,13 @@
   .modal-box h2 { font-family: 'Oswald', sans-serif; font-size: 24px; color: var(--amber); margin: 0 0 16px; }
   #playerModalForm { display: flex; flex-direction: column; gap: 12px; }
   #playerModalForm label { font-size: 12px; color: var(--cream-dim); display: flex; flex-direction: column; gap: 4px; }
+  .role-radio-group { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .role-radio-option {
+    flex-direction: row !important; align-items: center; gap: 6px !important;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 10px; font-size: 12.5px; color: var(--cream); cursor: pointer;
+  }
+  .role-radio-option input[type="radio"] { width: auto; accent-color: var(--pitch-light); }
   #playerModalForm input, #playerModalForm select {
     background: rgba(255,255,255,0.05); border: 1px solid var(--line); color: var(--cream);
     border-radius: 4px; padding: 7px 9px; font-family: 'Inter', sans-serif; font-size: 13px;
@@ -1328,8 +1335,8 @@ function renderPlayerDb() {
   renderPlayerDbList();
 }
 
-const BATTING_SKILL_SHORT = { "Compulsive Slogger": "CS", "Specialist Batsman": "SB", "Finisher": "FN", "Pinch Hitter": "PH" };
-const BOWLING_SKILL_SHORT = { "Specialist Bowler": "SB", "New Ball Bowler": "NB", "Death/Old Ball Bowler": "DB", "Mystery Spinner": "MS" };
+const BATTING_SKILL_SHORT = { "Specialist Batsman": "T", "Compulsive Slogger": "S", "Pinch Hitter": "P", "Finisher": "F", "None": "X" };
+const BOWLING_SKILL_SHORT = { "Specialist Bowler": "W", "New Ball Bowler": "N", "Mystery Spinner": "M", "Death/Old Ball Bowler": "D", "None": "X" };
 const HAND_SHORT = { "Right-handed": "RHB", "Left-handed": "LHB" };
 
 function ratingTierClass(rating) {
@@ -1400,27 +1407,33 @@ function openPlayerModal(player) {
   const isNew = !player;
   const modal = document.getElementById("playerModal");
   const form = document.getElementById("playerModalForm");
-  const p = player || { name: "", batting: 50, bowling: 30, battingSkill: "None", bowlingSkill: "None", battingHand: "Right-handed", bowlingStyle: "None", isWicketKeeper: false, keeping: 50 };
+  const p = player || { name: "", batting: "", bowling: "", battingSkill: "None", bowlingSkill: "None", battingHand: "Right-handed", bowlingStyle: "None", isWicketKeeper: false, keeping: "" };
+
+  // infer the starting role from existing data — only from clear signals
+  // (a keeper flag, or bowlingStyle already "Does Not Bowl"); anything else
+  // defaults to All-rounder rather than guessing from a merely-low rating
+  let initialRole = "allrounder";
+  if (p.isWicketKeeper) initialRole = "keeper";
+  else if (p.bowlingStyle === "Does Not Bowl") initialRole = "purebatter";
 
   form.innerHTML = `
     <label>Name <input type="text" data-role="name" value="${p.name}" /></label>
-    <label>Batting rating <input type="number" data-role="bat" value="${p.batting}" min="0" max="100" /></label>
-    <label>Bowling rating <input type="number" data-role="bowl" value="${p.bowling}" min="0" max="100" /></label>
-    <label>Batting skill <select data-role="batskill">${BATTING_SKILLS.map(s => `<option ${s===p.battingSkill?"selected":""}>${s}</option>`).join("")}</select></label>
-    <label>Bowling skill <select data-role="bowlskill">${BOWLING_SKILLS.map(s => `<option ${s===p.bowlingSkill?"selected":""}>${s}</option>`).join("")}</select></label>
-    <label>Batting hand <select data-role="hand">${BATTING_HANDS.map(s => `<option ${s===p.battingHand?"selected":""}>${s}</option>`).join("")}</select></label>
-    <label>Bowling style <select data-role="bowlstyle">${BOWLING_STYLES.map(s => `<option ${s===p.bowlingStyle?"selected":""}>${s}</option>`).join("")}</select></label>
-    <div style="display:flex; gap:16px;">
-      <label style="flex-direction:row; align-items:center; gap:8px;">
-        <input type="checkbox" data-role="keeper" ${p.isWicketKeeper ? "checked" : ""} style="width:auto;" />
-        Wicketkeeper
-      </label>
-      <label style="flex-direction:row; align-items:center; gap:8px;">
-        <input type="checkbox" data-role="purebatter" ${(!p.isWicketKeeper && p.bowlingStyle === "Does Not Bowl") ? "checked" : ""} style="width:auto;" />
-        Pure Batter
-      </label>
+    <div class="field" style="margin-bottom:4px;">
+      <label style="margin-bottom:4px;">Role</label>
+      <div class="role-radio-group">
+        <label class="role-radio-option"><input type="radio" name="playerRole" value="allrounder" ${initialRole === "allrounder" ? "checked" : ""} /> All-rounder</label>
+        <label class="role-radio-option"><input type="radio" name="playerRole" value="purebatter" ${initialRole === "purebatter" ? "checked" : ""} /> Pure Batter</label>
+        <label class="role-radio-option"><input type="radio" name="playerRole" value="keeper" ${initialRole === "keeper" ? "checked" : ""} /> Wicketkeeper</label>
+        <label class="role-radio-option"><input type="radio" name="playerRole" value="purebowler" ${initialRole === "purebowler" ? "checked" : ""} /> Pure Bowler</label>
+      </div>
     </div>
-    <label data-role="keepingfield" style="${p.isWicketKeeper ? "" : "display:none;"}">Keeping rating <input type="number" data-role="keeping" value="${p.keeping != null ? p.keeping : 50}" min="0" max="100" /></label>
+    <label data-role="batfield">Batting rating <input type="number" data-role="bat" value="${p.batting}" placeholder="e.g. 75" min="0" max="100" /></label>
+    <label data-role="bowlfield">Bowling rating <input type="number" data-role="bowl" value="${p.bowling}" placeholder="e.g. 65" min="0" max="100" /></label>
+    <label data-role="batskillfield">Batting skill <select data-role="batskill">${BATTING_SKILLS.map(s => `<option ${s===p.battingSkill?"selected":""}>${s}</option>`).join("")}</select></label>
+    <label data-role="bowlskillfield">Bowling skill <select data-role="bowlskill">${BOWLING_SKILLS.map(s => `<option ${s===p.bowlingSkill?"selected":""}>${s}</option>`).join("")}</select></label>
+    <label>Batting hand <select data-role="hand">${BATTING_HANDS.map(s => `<option ${s===p.battingHand?"selected":""}>${s}</option>`).join("")}</select></label>
+    <label data-role="bowlstylefield">Bowling style <select data-role="bowlstyle">${BOWLING_STYLES.map(s => `<option ${s===p.bowlingStyle?"selected":""}>${s}</option>`).join("")}</select></label>
+    <label data-role="keepingfield" style="${p.isWicketKeeper ? "" : "display:none;"}">Keeping rating <input type="number" data-role="keeping" value="${p.keeping || ""}" placeholder="e.g. 80" min="0" max="100" /></label>
     <div class="modal-actions">
       <button type="button" class="btn-primary" id="savePlayerBtn">${isNew ? "Add player" : "Save changes"}</button>
       <button type="button" class="btn-ghost" id="cancelPlayerBtn">Cancel</button>
@@ -1430,37 +1443,55 @@ function openPlayerModal(player) {
   modal.style.display = "flex";
   document.getElementById("cancelPlayerBtn").addEventListener("click", () => { modal.style.display = "none"; });
 
-  const keeperCheckbox = form.querySelector('[data-role="keeper"]');
-  const pureBatterCheckbox = form.querySelector('[data-role="purebatter"]');
+  const roleRadios = form.querySelectorAll('input[name="playerRole"]');
+  const batField = form.querySelector('[data-role="batfield"]');
+  const bowlField = form.querySelector('[data-role="bowlfield"]');
+  const batSkillField = form.querySelector('[data-role="batskillfield"]');
+  const bowlSkillField = form.querySelector('[data-role="bowlskillfield"]');
+  const batInput = form.querySelector('[data-role="bat"]');
+  const bowlInput = form.querySelector('[data-role="bowl"]');
+  const batSkillSelect = form.querySelector('[data-role="batskill"]');
   const styleSelect = form.querySelector('[data-role="bowlstyle"]');
   const keepingField = form.querySelector('[data-role="keepingfield"]');
-  function applyKeeperConstraint() {
-    const locked = keeperCheckbox.checked || pureBatterCheckbox.checked;
-    if (locked) {
-      styleSelect.value = "Does Not Bowl";
-      styleSelect.disabled = true;
-    } else {
-      styleSelect.disabled = false;
-    }
-    keepingField.style.display = keeperCheckbox.checked ? "" : "none";
-    // a wicketkeeper is already a non-bowler by definition — keep the two
-    // checkboxes from fighting each other over the same lock
-    if (keeperCheckbox.checked) { pureBatterCheckbox.checked = false; pureBatterCheckbox.disabled = true; }
-    else { pureBatterCheckbox.disabled = false; }
+
+  function currentRole() {
+    return form.querySelector('input[name="playerRole"]:checked').value;
   }
-  keeperCheckbox.addEventListener("change", applyKeeperConstraint);
-  pureBatterCheckbox.addEventListener("change", applyKeeperConstraint);
-  applyKeeperConstraint(); // in case this player was already saved as a keeper or pure batter
+  // Batting hand is never nullified — every player has one, bowler or not.
+  function applyRoleConstraint() {
+    const role = currentRole();
+    const bowlingNullified = role === "purebatter" || role === "keeper";
+    const battingNullified = role === "purebowler";
+
+    bowlField.style.display = bowlingNullified ? "none" : "";
+    bowlSkillField.style.display = bowlingNullified ? "none" : "";
+    styleSelect.disabled = bowlingNullified;
+    if (bowlingNullified) { styleSelect.value = "Does Not Bowl"; bowlInput.value = "0"; }
+    else if (styleSelect.value === "Does Not Bowl") { styleSelect.value = "Right Arm Medium"; }
+
+    batField.style.display = battingNullified ? "none" : "";
+    batSkillField.style.display = battingNullified ? "none" : "";
+    if (battingNullified) { batInput.value = "10"; batSkillSelect.value = "None"; }
+
+    keepingField.style.display = role === "keeper" ? "" : "none";
+  }
+  roleRadios.forEach(r => r.addEventListener("change", applyRoleConstraint));
+  applyRoleConstraint();
 
   document.getElementById("savePlayerBtn").addEventListener("click", () => {
     const get = role => form.querySelector(`[data-role="${role}"]`).value;
-    const isWicketKeeper = keeperCheckbox.checked;
-    const isPureBatter = pureBatterCheckbox.checked;
+    const role = currentRole();
+    const isWicketKeeper = role === "keeper";
     const updated = {
-      name: get("name") || "Player", batting: Number(get("bat")) || 0, bowling: Number(get("bowl")) || 0,
-      battingSkill: get("batskill"), bowlingSkill: get("bowlskill"), battingHand: get("hand"),
-      bowlingStyle: (isWicketKeeper || isPureBatter) ? "Does Not Bowl" : get("bowlstyle"), // enforced: neither ever bowls
-      isWicketKeeper, keeping: Number(get("keeping")) || 0,
+      name: get("name") || "Player",
+      batting: Number(get("bat")) || 0,
+      bowling: Number(get("bowl")) || 0,
+      battingSkill: role === "purebowler" ? "None" : get("batskill"),
+      bowlingSkill: (role === "purebatter" || role === "keeper") ? "None" : get("bowlskill"),
+      battingHand: get("hand"), // never nullified — every player has one
+      bowlingStyle: (role === "purebatter" || role === "keeper") ? "Does Not Bowl" : get("bowlstyle"),
+      isWicketKeeper,
+      keeping: isWicketKeeper ? (Number(get("keeping")) || 0) : 0,
     };
     if (isNew) {
       appState.players.push({ id: nextId++, ...updated });
