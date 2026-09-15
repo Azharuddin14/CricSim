@@ -348,6 +348,7 @@
     <button class="tab-btn" data-tab="seasons">Seasons</button>
     <button class="tab-btn" data-tab="quickmatch">Quick Match</button>
     <button class="tab-btn" data-tab="stats">Stats &amp; History</button>
+    <button class="tab-btn" data-tab="records">Records</button>
   </div>
 
   <div id="playerdbTab" class="tab-panel active">
@@ -457,6 +458,41 @@
     </div>
   </div>
 
+  <div id="recordsTab" class="tab-panel">
+    <div class="panel">
+      <h2>All-Time Table</h2>
+      <div id="recordsAllTimeTable"></div>
+    </div>
+    <div class="panel">
+      <h2>Top 10 Scores</h2>
+      <div id="recordsTopScores"></div>
+    </div>
+    <div class="panel">
+      <h2>Top 10 Successful Run Chases</h2>
+      <div id="recordsTopChases"></div>
+    </div>
+    <div class="panel">
+      <h2>Lowest 10 Scores</h2>
+      <div id="recordsLowScores"></div>
+    </div>
+    <div class="panel">
+      <h2>Lowest 10 Totals Defended</h2>
+      <div id="recordsLowestDefended"></div>
+    </div>
+    <div class="panel">
+      <h2>Top 10 Players — Man of the Match Count</h2>
+      <div id="recordsMomTally"></div>
+    </div>
+    <div class="panel">
+      <h2>Top 10 Batting Scores (Man of the Match performances)</h2>
+      <div id="recordsTopMomBatting"></div>
+    </div>
+    <div class="panel">
+      <h2>Top 10 Bowling Figures (Man of the Match performances)</h2>
+      <div id="recordsTopMomBowling"></div>
+    </div>
+  </div>
+
 
 </main>
 
@@ -505,7 +541,7 @@ function normalize(p) {
 
 function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wicketsDown, runRateNeeded, currentRunRate, batterBallsFaced, battingDayFactor, partner, batterRunsSoFar }) {
   let p = { ...BASE_PROBS };
-  const skillDiff = (batter.batting - bowler.bowling) / 65;
+  const skillDiff = (batter.batting - bowler.bowling) / 50; // calibrated to the 50-100 rating range in actual use
   p.W *= clamp(1 - skillDiff * 0.6, 0.4, 1.7);
   p[4] *= clamp(1 + skillDiff * 0.5, 0.5, 1.9);
   p[6] *= clamp(1 + skillDiff * 0.6, 0.4, 2.1);
@@ -1157,6 +1193,7 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     if (btn.dataset.tab === "tournament") renderTournamentTab();
     if (btn.dataset.tab === "quickmatch") renderQuickMatchTab();
     if (btn.dataset.tab === "stats") renderStatsTab();
+    if (btn.dataset.tab === "records") renderRecordsTab();
     if (btn.dataset.tab === "seasons") renderSeasonsTab();
   });
 });
@@ -1760,6 +1797,158 @@ function renderStatsTab() {
       renderStatsTab();
     });
   });
+}
+
+// ============================================================
+// Records — same categories as Pitchside's Records screen, computed
+// from matchsim's own saved match history instead of manually-entered
+// season data.
+// ============================================================
+
+/** Every individual innings played, with whether it was a "complete"
+ * total (not cut short by a successful chase) and whether that side
+ * was chasing and won. */
+function getAllInnings(matches, teamFilter) {
+  const innings = [];
+  matches.forEach(m => {
+    const r = m.result;
+    const secondChasedSuccessfully = r.second.runs > r.first.runs;
+    if (!teamFilter || r.firstTeamName === teamFilter) {
+      innings.push({ team: r.firstTeamName, opponent: r.secondTeamName, score: { runs: r.first.runs, wkts: r.first.wickets, overs: r.first.oversUsed }, complete: true, chasing: false, won: r.margin !== "Match tied" && r.first.runs > r.second.runs, match: m });
+    }
+    if (!teamFilter || r.secondTeamName === teamFilter) {
+      innings.push({ team: r.secondTeamName, opponent: r.firstTeamName, score: { runs: r.second.runs, wkts: r.second.wickets, overs: r.second.oversUsed }, complete: !secondChasedSuccessfully, chasing: true, won: secondChasedSuccessfully, match: m });
+    }
+  });
+  return innings;
+}
+
+function getTopScores(matches, n, teamFilter) {
+  return getAllInnings(matches, teamFilter).filter(i => i.complete).sort((a, b) => b.score.runs - a.score.runs).slice(0, n);
+}
+function getLowScores(matches, n, teamFilter) {
+  return getAllInnings(matches, teamFilter).filter(i => i.complete).sort((a, b) => a.score.runs - b.score.runs).slice(0, n);
+}
+function getTopChases(matches, n, teamFilter) {
+  return getAllInnings(matches, teamFilter).filter(i => i.chasing && i.won).sort((a, b) => b.score.runs - a.score.runs).slice(0, n);
+}
+function getLowestDefended(matches, n, teamFilter) {
+  const rows = [];
+  matches.forEach(m => {
+    const r = m.result;
+    const firstWon = r.margin !== "Match tied" && r.first.runs > r.second.runs;
+    if (!firstWon) return;
+    if (teamFilter && r.firstTeamName !== teamFilter) return;
+    rows.push({
+      team: r.firstTeamName, opponent: r.secondTeamName,
+      score: { runs: r.first.runs, wkts: r.first.wickets, overs: r.first.oversUsed },
+      oppScore: { runs: r.second.runs, wkts: r.second.wickets, overs: r.second.oversUsed },
+      match: m,
+    });
+  });
+  return rows.sort((a, b) => a.score.runs - b.score.runs).slice(0, n);
+}
+function getMomTallyAllMatches(matches) {
+  const counts = {};
+  matches.forEach(m => {
+    const motm = m.result.motm;
+    if (!motm) return;
+    const key = motm.name + "|||" + motm.teamName;
+    counts[key] = counts[key] || { name: motm.name, teamName: motm.teamName, count: 0 };
+    counts[key].count++;
+  });
+  return Object.values(counts).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+function getTopMomBatting(matches, n, teamFilter) {
+  const rows = [];
+  matches.forEach(m => {
+    const motm = m.result.motm;
+    if (!motm) return;
+    if (teamFilter && motm.teamName !== teamFilter) return;
+    const bLog = [...m.result.first.battingLog, ...m.result.second.battingLog].find(b => b.name === motm.name && b.balls > 0);
+    if (!bLog) return;
+    rows.push({ name: motm.name, teamName: motm.teamName, runs: bLog.runs, balls: bLog.balls, out: bLog.out, match: m });
+  });
+  return rows.sort((a, b) => b.runs - a.runs).slice(0, n);
+}
+function getTopMomBowling(matches, n, teamFilter) {
+  const rows = [];
+  matches.forEach(m => {
+    const motm = m.result.motm;
+    if (!motm) return;
+    if (teamFilter && motm.teamName !== teamFilter) return;
+    const bwLog = [...m.result.first.bowlingLog, ...m.result.second.bowlingLog].find(b => b.name === motm.name && b.overs > 0);
+    if (!bwLog) return;
+    rows.push({ name: motm.name, teamName: motm.teamName, wickets: bwLog.wickets, runs: bwLog.runs, overs: bwLog.overs, match: m });
+  });
+  return rows.sort((a, b) => b.wickets - a.wickets || a.runs - b.runs).slice(0, n);
+}
+function computeAllTimeTable(matches) {
+  const stats = {};
+  function ensure(name) {
+    if (!stats[name]) stats[name] = { name, played: 0, won: 0, lost: 0, tied: 0, points: 0, runsFor: 0, oversFor: 0, runsAgainst: 0, oversAgainst: 0 };
+  }
+  matches.forEach(m => {
+    const r = m.result;
+    ensure(r.firstTeamName); ensure(r.secondTeamName);
+    const s1 = stats[r.firstTeamName], s2 = stats[r.secondTeamName];
+    s1.played++; s2.played++;
+    const totalOvers = 20;
+    const o1 = r.first.wickets >= 10 ? totalOvers : r.first.oversUsed;
+    const o2 = r.second.wickets >= 10 ? totalOvers : r.second.oversUsed;
+    s1.runsFor += r.first.runs; s1.oversFor += o1; s1.runsAgainst += r.second.runs; s1.oversAgainst += o2;
+    s2.runsFor += r.second.runs; s2.oversFor += o2; s2.runsAgainst += r.first.runs; s2.oversAgainst += o1;
+    if (r.margin === "Match tied") { s1.tied++; s2.tied++; s1.points++; s2.points++; }
+    else if (r.second.runs > r.first.runs) { s2.won++; s1.lost++; s2.points += 2; }
+    else { s1.won++; s2.lost++; s1.points += 2; }
+  });
+  return Object.values(stats)
+    .map(s => ({ ...s, nrr: (s.oversFor > 0 ? s.runsFor / s.oversFor : 0) - (s.oversAgainst > 0 ? s.runsAgainst / s.oversAgainst : 0) }))
+    .sort((a, b) => b.points - a.points || b.nrr - a.nrr);
+}
+
+function scoreLine(score) {
+  const allOut = score.wkts >= 10;
+  return `${score.runs}${allOut ? "" : "/" + score.wkts} (${formatOvers(score.overs)})`;
+}
+
+function renderRecordsTab() {
+  const matches = appState.matches;
+  const empty = `<p class="hint-text">No matches recorded yet.</p>`;
+
+  const table = computeAllTimeTable(matches);
+  document.getElementById("recordsAllTimeTable").innerHTML = table.length === 0 ? empty : `
+    <table class="points-table"><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>NRR</th><th>Pts</th></tr></thead>
+    <tbody>${table.map((s, i) => `<tr><td>${i+1}</td><td>${s.name}</td><td class="mono">${s.played}</td><td class="mono">${s.won}</td><td class="mono">${s.lost}</td><td class="mono">${s.tied}</td><td class="mono">${s.nrr.toFixed(3)}</td><td class="mono"><b>${s.points}</b></td></tr>`).join("")}</tbody></table>`;
+
+  const topScores = getTopScores(matches, 10);
+  document.getElementById("recordsTopScores").innerHTML = topScores.length === 0 ? empty : topScores.map((i, idx) =>
+    `<div class="match-result-line">${idx+1}. <b>${i.team}</b> ${scoreLine(i.score)} vs ${i.opponent}</div>`).join("");
+
+  const topChases = getTopChases(matches, 10);
+  document.getElementById("recordsTopChases").innerHTML = topChases.length === 0 ? empty : topChases.map((i, idx) =>
+    `<div class="match-result-line">${idx+1}. <b>${i.team}</b> chased ${scoreLine(i.score)} vs ${i.opponent}</div>`).join("");
+
+  const lowScores = getLowScores(matches, 10);
+  document.getElementById("recordsLowScores").innerHTML = lowScores.length === 0 ? empty : lowScores.map((i, idx) =>
+    `<div class="match-result-line">${idx+1}. <b>${i.team}</b> ${scoreLine(i.score)} vs ${i.opponent}</div>`).join("");
+
+  const lowestDefended = getLowestDefended(matches, 10);
+  document.getElementById("recordsLowestDefended").innerHTML = lowestDefended.length === 0 ? empty : lowestDefended.map((i, idx) =>
+    `<div class="match-result-line">${idx+1}. <b>${i.team}</b> ${scoreLine(i.score)} defended vs ${i.opponent}'s ${scoreLine(i.oppScore)}</div>`).join("");
+
+  const momTally = getMomTallyAllMatches(matches).slice(0, 10);
+  document.getElementById("recordsMomTally").innerHTML = momTally.length === 0 ? empty : `
+    <table class="points-table"><thead><tr><th>#</th><th>Player</th><th>Team</th><th>MOM</th></tr></thead>
+    <tbody>${momTally.map((p, i) => `<tr><td>${i+1}</td><td>${p.name}</td><td>${p.teamName}</td><td class="mono"><b>${p.count}</b></td></tr>`).join("")}</tbody></table>`;
+
+  const topMomBatting = getTopMomBatting(matches, 10);
+  document.getElementById("recordsTopMomBatting").innerHTML = topMomBatting.length === 0 ? empty : topMomBatting.map((b, idx) =>
+    `<div class="match-result-line">${idx+1}. <b>${b.name}</b> (${b.teamName}) — ${b.runs}${b.out ? "" : "*"} (${b.balls})</div>`).join("");
+
+  const topMomBowling = getTopMomBowling(matches, 10);
+  document.getElementById("recordsTopMomBowling").innerHTML = topMomBowling.length === 0 ? empty : topMomBowling.map((b, idx) =>
+    `<div class="match-result-line">${idx+1}. <b>${b.name}</b> (${b.teamName}) — ${b.wickets}/${b.runs} (${formatOvers(b.overs)} ov)</div>`).join("");
 }
 
 // ============================================================

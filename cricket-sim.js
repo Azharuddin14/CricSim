@@ -85,7 +85,7 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   let p = { ...BASE_PROBS };
 
   // 1. Skill differential: batting rating vs bowling rating, -1..1
-  const skillDiff = (batter.batting - bowler.bowling) / 65;
+  const skillDiff = (batter.batting - bowler.bowling) / 50; // calibrated to the 50-100 rating range in actual use
   p.W *= clamp(1 - skillDiff * 0.6, 0.4, 1.7);
   p[4] *= clamp(1 + skillDiff * 0.5, 0.5, 1.9);
   p[6] *= clamp(1 + skillDiff * 0.6, 0.4, 2.1);
