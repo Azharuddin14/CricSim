@@ -398,7 +398,7 @@
   .live-score { font-family: 'Oswald', sans-serif; font-size: 40px; font-weight: 600; color: var(--amber); line-height: 1; }
   .commentary-feed {
     background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-top: none;
-    border-radius: 0 0 6px 6px; padding: 12px 16px; min-height: 160px;
+    border-radius: 0 0 6px 6px; padding: 12px 16px; height: 340px; overflow-y: auto;
     font-family: 'JetBrains Mono', monospace; font-size: 12px; margin-bottom: 24px;
   }
   .ball-line { padding: 3px 0; color: var(--cream-dim); }
@@ -484,6 +484,7 @@
 
   <div id="seasonLiveOverlay" class="modal-overlay">
     <div class="modal-box" style="max-width:640px;">
+      <div class="toss-line" id="seasonLiveTossLine"></div>
       <div class="live-scoreboard">
         <div class="live-label" id="seasonLiveLabel">—</div>
         <div class="live-score" id="seasonLiveScore"></div>
@@ -1496,7 +1497,7 @@ function openPlayerModal(player) {
 
     batField.style.display = battingNullified ? "none" : "";
     batSkillField.style.display = battingNullified ? "none" : "";
-    if (battingNullified) { batInput.value = "10"; batSkillSelect.value = "None"; }
+    if (battingNullified) { batInput.value = "0"; batSkillSelect.value = "None"; }
 
     keepingField.style.display = role === "keeper" ? "" : "none";
   }
@@ -1579,7 +1580,7 @@ function renderTeamsTab() {
       </div>
       <div class="sq-card-body">
         <span class="sq-card-name">${p.name}</span>
-        <span class="sq-card-meta">Bat ${p.batting} · Bowl ${p.bowling}${p.isWicketKeeper ? " · WK" : ""}</span>
+        <span class="sq-card-meta">${p.role === "purebowler" ? "Bat —" : "Bat " + p.batting} · ${(p.role === "purebatter" || p.role === "keeper") ? "Bowl —" : "Bowl " + p.bowling}${p.isWicketKeeper ? " · WK" : ""}</span>
       </div>
       <button class="sq-remove-btn remove-link" data-player-id="${p.id}">Remove</button>
     </div>`).join("");
@@ -1848,6 +1849,7 @@ function playSeasonMatchLive(match, pitch, totalOvers, onDone) {
   const liveLabelEl = document.getElementById("seasonLiveLabel");
   const liveScoreEl = document.getElementById("seasonLiveScore");
   const finalSummaryEl = document.getElementById("seasonLiveFinalSummary");
+  const tossLineEl = document.getElementById("seasonLiveTossLine");
   const closeBtn = document.getElementById("seasonLiveCloseBtn");
   finalSummaryEl.style.display = "none";
   finalSummaryEl.innerHTML = "";
@@ -1855,7 +1857,7 @@ function playSeasonMatchLive(match, pitch, totalOvers, onDone) {
   overlay.style.display = "flex";
 
   playBackMatch(result, colors, {
-    feedEl, liveLabelEl, liveScoreEl, finalSummaryEl,
+    feedEl, liveLabelEl, liveScoreEl, finalSummaryEl, tossLineEl,
     onComplete: () => {
       const firstIsTeamA = result.firstTeamName === teamA.name;
       match.battingFirstId = firstIsTeamA ? match.team1Id : match.team2Id;
@@ -2436,7 +2438,7 @@ document.getElementById("simulateBtn").addEventListener("click", () => {
   const resultsEl = document.getElementById("results");
   resultsEl.style.display = "block";
   resultsEl.innerHTML = `
-    <div class="toss-line">
+    <div class="toss-line" id="tossLine">
       ${result.toss.tossWinnerName} won the toss and chose to ${result.toss.decision === "bat" ? "bat" : "bowl"} first.
     </div>
     <div class="live-scoreboard">
@@ -2484,6 +2486,7 @@ function playBackMatch(result, teamColors, opts) {
   const liveLabel = opts.liveLabelEl || document.getElementById("liveLabel");
   const liveScore = opts.liveScoreEl || document.getElementById("liveScore");
   const finalSummaryEl = opts.finalSummaryEl || document.getElementById("finalSummary");
+  const tossLineEl = opts.tossLineEl || document.getElementById("tossLine");
   const onComplete = opts.onComplete || null;
   const MS_PER_BALL = 1000 / 12; // 2 overs = 12 balls per second
   const colors = teamColors || { firstTeamColor: "#E63946", secondTeamColor: "#1D3557" };
@@ -2500,6 +2503,14 @@ function playBackMatch(result, teamColors, opts) {
     if (ballIdx === 0) {
       liveLabel.textContent = inn.label;
       feed.innerHTML = "";
+      if (tossLineEl) {
+        if (inningsIdx === 0) {
+          tossLineEl.textContent = `${result.toss.tossWinnerName} won the toss and chose to ${result.toss.decision === "bat" ? "bat" : "bowl"} first.`;
+        } else {
+          const target = result.first.runs + 1;
+          tossLineEl.textContent = `Target: ${target} run${target === 1 ? "" : "s"} to win.`;
+        }
+      }
     }
     if (ballIdx >= inn.timeline.length) {
       inningsIdx++;
@@ -2515,8 +2526,12 @@ function playBackMatch(result, teamColors, opts) {
       return;
     }
     const b = inn.timeline[ballIdx];
-    const ballsSoFar = ballIdx + 1;
-    liveScore.textContent = `${b.score}/${b.wickets} (${formatOvers(Math.floor(ballsSoFar / 6) + (ballsSoFar % 6) / 10)})`;
+    // over progress from the ball's own over/ball fields, not a naive count
+    // of timeline entries — wides and no-balls don't consume a legal ball,
+    // so counting every entry equally would overstate how far the over has
+    // actually gone
+    const decimalOvers = (b.over - 1) + (b.ball - 1) / 10;
+    liveScore.textContent = `${b.score}/${b.wickets} (${formatOvers(decimalOvers)})`;
     const line = document.createElement("div");
     line.className = "ball-line" + (b.commentary.includes("!") ? " highlight" : "");
     line.textContent = `${b.over}.${b.ball}  ${b.commentary}`;
