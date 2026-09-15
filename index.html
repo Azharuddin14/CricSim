@@ -840,6 +840,16 @@ function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, power
   const isPowerplay = over < Math.min(4, totalOvers);
   const isPaceStyle = b => !SPIN_STYLES.includes(b.bowlingStyle) && b.bowlingStyle !== "None" && b.bowlingStyle !== "Does Not Bowl";
   const deathPhase = over >= totalOvers - 4;
+  const earlyPhase = over < Math.round(totalOvers * 0.4);
+
+  if (earlyPhase) {
+    const withoutOffPhase = eligible.filter(b => b.bowlingSkill !== "Death/Old Ball Bowler" && b.bowlingSkill !== "Mystery Spinner");
+    if (withoutOffPhase.length > 0) eligible = withoutOffPhase;
+  }
+  if (deathPhase) {
+    const withoutSpin = eligible.filter(b => !SPIN_STYLES.includes(b.bowlingStyle));
+    if (withoutSpin.length > 0) eligible = withoutSpin;
+  }
 
   if (reservedDeathBowler && !deathPhase && !capped(reservedDeathBowler)) {
     const oversLeft = generalMax - (oversBowledMap.get(reservedDeathBowler) || 0);

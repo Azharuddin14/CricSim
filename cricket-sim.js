@@ -362,6 +362,20 @@ function chooseBowlerForOver({ eligible, oversBowledMap, over, totalOvers, power
   const isPowerplay = over < Math.min(4, totalOvers);
   const isPaceStyle = b => b.bowlingStyle !== "None" && b.bowlingStyle !== "Does Not Bowl" && !isSpin(b.bowlingStyle);
   const deathPhase = over >= totalOvers - 4;
+  const earlyPhase = over < Math.round(totalOvers * 0.4);
+
+  // Hard-exclude death bowlers and mystery spinners from the powerplay
+  // window entirely — "completely avoid", not just discourage — unless
+  // doing so would leave the team with literally no one to bowl.
+  if (earlyPhase) {
+    const withoutOffPhase = eligible.filter(b => b.bowlingSkill !== "Death/Old Ball Bowler" && b.bowlingSkill !== "Mystery Spinner");
+    if (withoutOffPhase.length > 0) eligible = withoutOffPhase;
+  }
+  // Same hard rule for any spinner during the death overs.
+  if (deathPhase) {
+    const withoutSpin = eligible.filter(b => !isSpin(b.bowlingStyle));
+    if (withoutSpin.length > 0) eligible = withoutSpin;
+  }
 
   // Reserve the team's best death specialist — but only once they're down
   // to their last couple of overs of eligibility. This lets them still open
