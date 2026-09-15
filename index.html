@@ -245,6 +245,50 @@
   .team-selector-pill:hover { border-color: rgba(45,106,79,0.6); color: var(--cream); }
   .team-selector-pill.active { background: rgba(27,67,50,0.55); border-color: var(--pitch-light); color: var(--cream); box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
   .team-selector-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 2px rgba(255,255,255,0.08); }
+
+  /* Pitchside-style light cream cards — used throughout the Seasons tab.
+     Deliberately a different surface treatment from the rest of the dark
+     app chrome, matching how Pitchside itself renders every card. */
+  .ps-card { background: #F5EFDC; border-radius: 10px; padding: 16px; margin-bottom: 16px; overflow: hidden; }
+  .ps-card-title { font-family: 'Oswald', sans-serif; font-size: 19px; color: #1B4332; margin-bottom: 10px; }
+  .ps-stats-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  .ps-stat-col { min-width: 0; }
+  .ps-stat-heading { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(22,33,62,0.55); font-weight: 700; margin-bottom: 6px; }
+  .ps-scroll { max-height: 240px; overflow-y: auto; border-radius: 8px; }
+  .ps-table { width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 12.5px; }
+  .ps-table thead th {
+    position: sticky; top: 0; background: #1B4332; color: #E8A33D;
+    text-align: left; padding: 7px 9px; font-family: 'Oswald', sans-serif; font-weight: 400; font-size: 12px;
+  }
+  .ps-table td { padding: 6px 9px; color: #16213E; border-bottom: 1px solid rgba(27,67,50,0.1); }
+  .ps-table tbody tr:last-child td { border-bottom: none; }
+  .ps-dim { color: rgba(22,33,62,0.5); font-size: 11px; }
+  .ps-mono { font-family: 'JetBrains Mono', monospace; color: #16213E; }
+  .ps-empty { color: rgba(22,33,62,0.4); font-size: 12.5px; font-style: italic; padding: 8px 2px; }
+  .ps-card-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .ps-match-line {
+    background: rgba(27,67,50,0.05); border-radius: 6px; padding: 8px 10px; margin-bottom: 6px;
+    font-family: 'Inter', sans-serif; font-size: 12.5px; color: #16213E; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  }
+  .ps-match-line b { color: #1B4332; }
+  .ps-ghost-btn {
+    background: rgba(27,67,50,0.08); border: 1px solid rgba(27,67,50,0.25); color: #1B4332;
+    font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 6px; min-height: unset;
+  }
+  .ps-ghost-btn:hover { background: rgba(27,67,50,0.16); }
+  .ps-remove-btn {
+    background: rgba(193,68,60,0.08); border: 1px solid rgba(193,68,60,0.35); color: #C1443C;
+    font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 6px; min-height: unset;
+  }
+  .ps-remove-btn:hover { background: rgba(193,68,60,0.18); }
+  .ps-select {
+    background: #fff; border: 1px solid rgba(27,67,50,0.25); color: #16213E; border-radius: 6px;
+    padding: 6px 9px; font-size: 12.5px; font-family: 'Inter', sans-serif; min-height: unset;
+  }
+  .ps-standings-table thead th { background: #1B4332; color: #E8A33D; font-family: 'Oswald', sans-serif; font-weight: 400; padding: 7px 9px; text-align: left; }
+  .ps-standings-table td { padding: 6px 9px; color: #16213E; font-family: 'Inter', sans-serif; font-size: 12.5px; border-bottom: 1px solid rgba(27,67,50,0.08); }
+  .ps-standings-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; border-radius: 8px; overflow: hidden; }
+  @media (min-width: 640px) { .ps-stats-grid { grid-template-columns: 1fr 1fr 1fr; } }
   .scroll-list .player-list { margin-bottom: 0; }
   .player-count { font-size: 11px; color: var(--cream-dim); margin: 4px 0 10px; }
   .player-count-warning { color: var(--wicket); font-weight: 600; }
@@ -2282,6 +2326,20 @@ function renderSeasonsTab() {
   renderSeasonDetail();
 }
 
+/** Every played match in a season (groups + knockout rounds), reshaped to
+ * the same {teamAName, teamBName, result} record computeAggregateStats and
+ * getMomTallyAllMatches already expect — so season-scoped leaderboards can
+ * reuse the exact same aggregation logic as the all-time Records tab. */
+function seasonPlayedMatchRecords(season) {
+  const records = [];
+  const allMatches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)];
+  allMatches.forEach(m => {
+    if (!m.fullResult) return;
+    records.push({ teamAName: getTeam(m.team1Id)?.name, teamBName: getTeam(m.team2Id)?.name, result: m.fullResult });
+  });
+  return records;
+}
+
 function renderSeasonDetail() {
   const el = document.getElementById("seasonDetail");
   if (!currentSeasonView) { el.innerHTML = ""; return; }
@@ -2334,6 +2392,44 @@ function renderSeasonDetail() {
     ? `<div class="result-line" style="margin-top:0;">🏆 Champion: ${getTeam(getWinnerId(finalMatch))?.name || "Tied"}</div>`
     : "";
 
+  const seasonRecords = seasonPlayedMatchRecords(season);
+  const seasonStats = computeAggregateStats(seasonRecords);
+  const seasonMomTally = getMomTallyAllMatches(seasonRecords);
+  const topRuns = [...seasonStats.batting].sort((a, b) => b.runs - a.runs).slice(0, 15);
+  const topWickets = [...seasonStats.bowling].sort((a, b) => b.wickets - a.wickets || a.runs - b.runs).slice(0, 15);
+  const topMom = seasonMomTally.slice(0, 15);
+  const emptyStat = `<p class="ps-empty">No matches played yet this season.</p>`;
+  const seasonStatsHtml = `
+    <div class="ps-card">
+      <div class="ps-card-title">Season Stats</div>
+      <div class="ps-stats-grid">
+        <div class="ps-stat-col">
+          <div class="ps-stat-heading">Top Run Scorers</div>
+          <div class="ps-scroll">
+            ${topRuns.length === 0 ? emptyStat : `<table class="ps-table"><thead><tr><th>#</th><th>Player</th><th>Runs</th><th>SR</th></tr></thead><tbody>
+              ${topRuns.map((b, i) => `<tr><td>${i+1}</td><td>${b.name} <span class="ps-dim">(${b.team})</span></td><td class="ps-mono"><b>${b.runs}</b></td><td class="ps-mono">${((b.runs/Math.max(1,b.balls))*100).toFixed(1)}</td></tr>`).join("")}
+            </tbody></table>`}
+          </div>
+        </div>
+        <div class="ps-stat-col">
+          <div class="ps-stat-heading">Top Wicket Takers</div>
+          <div class="ps-scroll">
+            ${topWickets.length === 0 ? emptyStat : `<table class="ps-table"><thead><tr><th>#</th><th>Player</th><th>Wkts</th><th>Econ</th></tr></thead><tbody>
+              ${topWickets.map((b, i) => `<tr><td>${i+1}</td><td>${b.name} <span class="ps-dim">(${b.team})</span></td><td class="ps-mono"><b>${b.wickets}</b></td><td class="ps-mono">${(b.runs/Math.max(0.1,b.overs)).toFixed(2)}</td></tr>`).join("")}
+            </tbody></table>`}
+          </div>
+        </div>
+        <div class="ps-stat-col">
+          <div class="ps-stat-heading">Most MOM Awards</div>
+          <div class="ps-scroll">
+            ${topMom.length === 0 ? emptyStat : `<table class="ps-table"><thead><tr><th>#</th><th>Player</th><th>MOM</th></tr></thead><tbody>
+              ${topMom.map((p, i) => `<tr><td>${i+1}</td><td>${p.name} <span class="ps-dim">(${p.teamName})</span></td><td class="ps-mono"><b>${p.count}</b></td></tr>`).join("")}
+            </tbody></table>`}
+          </div>
+        </div>
+      </div>
+    </div>`;
+
   el.innerHTML = `
     <div class="panel">
       <div class="panel-header-row"><h2>${season.name}</h2><span class="hint-text">${season.groundNames.join(", ")}</span></div>
@@ -2343,6 +2439,7 @@ function renderSeasonDetail() {
         <button class="btn-ghost" id="addRoundBtn">+ Add knockout round</button>
       </div>
     </div>
+    ${seasonStatsHtml}
     ${groupsHtml}
     ${roundsHtml}
   `;
@@ -2369,55 +2466,55 @@ function renderSeasonDetail() {
 function renderGroupCard(season, group, pitch, totalOvers) {
   const standings = computeStandings(group.teamIds, group.matches, totalOvers);
   const standingsRows = standings.map((s, i) => `
-    <tr><td>${i+1}</td><td>${getTeam(s.id)?.name || "?"}</td><td class="mono">${s.played}</td><td class="mono">${s.won}</td>
-    <td class="mono">${s.lost}</td><td class="mono">${s.tied}</td><td class="mono">${s.nrr.toFixed(3)}</td><td class="mono"><b>${s.points}</b></td></tr>
+    <tr><td>${i+1}</td><td>${getTeam(s.id)?.name || "?"}</td><td class="ps-mono">${s.played}</td><td class="ps-mono">${s.won}</td>
+    <td class="ps-mono">${s.lost}</td><td class="ps-mono">${s.tied}</td><td class="ps-mono">${s.nrr.toFixed(3)}</td><td class="ps-mono"><b>${s.points}</b></td></tr>
   `).join("");
   const matchLines = group.matches.map(m => `
-    <div class="match-result-line" data-group-id="${group.id}" data-match-id="${m.id}">
+    <div class="ps-match-line" data-group-id="${group.id}" data-match-id="${m.id}">
       <b>${getTeam(m.team1Id)?.name}</b> ${formatSeasonScore(m.score1)} vs <b>${getTeam(m.team2Id)?.name}</b> ${formatSeasonScore(m.score2)}
-      ${m.groundName ? `<span class="hint-text"> · ${m.groundName}</span>` : ""}
-      ${isPlayed(m) ? "" : `<button class="btn-ghost sim-match-btn" data-group-id="${group.id}" data-match-id="${m.id}" style="margin-left:8px;">Simulate</button>`}
-      <button class="sq-remove-btn remove-group-match-btn" data-group-id="${group.id}" data-match-id="${m.id}" style="margin-left:8px;">Remove</button>
+      ${m.groundName ? `<span class="ps-dim">· ${m.groundName}</span>` : ""}
+      ${isPlayed(m) ? "" : `<button class="ps-ghost-btn sim-match-btn" data-group-id="${group.id}" data-match-id="${m.id}">Simulate</button>`}
+      <button class="ps-remove-btn remove-group-match-btn" data-group-id="${group.id}" data-match-id="${m.id}">Remove</button>
     </div>`).join("");
   const teamOptions = group.teamIds.map(id => `<option value="${id}">${getTeam(id)?.name}</option>`).join("");
   const groundOptions = season.groundNames.map(name => `<option value="${name}">${name}</option>`).join("");
   return `
-    <div class="team-card">
-      <div class="team-card-header"><span style="font-size:20px; font-family:'Oswald',sans-serif; color:var(--pitch-light);">${group.name}</span><button class="sq-remove-btn remove-group-btn" data-group-id="${group.id}">Delete group</button></div>
-      <div class="add-to-team-row">
-        <button class="btn-ghost add-fixtures-btn" data-group-id="${group.id}">Add missing fixtures</button>
-        <button class="btn-ghost sim-all-btn" data-group-id="${group.id}">Simulate all pending</button>
+    <div class="ps-card">
+      <div class="ps-card-header-row"><span class="ps-card-title" style="margin-bottom:0;">${group.name}</span><button class="ps-remove-btn remove-group-btn" data-group-id="${group.id}">Delete group</button></div>
+      <div class="ps-card-header-row">
+        <button class="ps-ghost-btn add-fixtures-btn" data-group-id="${group.id}">Add missing fixtures</button>
+        <button class="ps-ghost-btn sim-all-btn" data-group-id="${group.id}">Simulate all pending</button>
       </div>
-      <table class="points-table"><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>NRR</th><th>Pts</th></tr></thead><tbody>${standingsRows}</tbody></table>
-      ${matchLines || '<p class="hint-text">No fixtures yet.</p>'}
-      <div class="add-to-team-row" style="margin-top:10px;">
-        <select data-role="group-team1" data-group-id="${group.id}">${teamOptions}</select>
-        <select data-role="group-team2" data-group-id="${group.id}">${teamOptions}</select>
-        <select data-role="group-ground" data-group-id="${group.id}">${groundOptions}</select>
-        <button class="btn-ghost add-custom-group-match-btn" data-group-id="${group.id}">Add custom match</button>
+      <table class="ps-standings-table"><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>NRR</th><th>Pts</th></tr></thead><tbody>${standingsRows}</tbody></table>
+      ${matchLines || '<p class="ps-empty">No fixtures yet.</p>'}
+      <div class="ps-card-header-row" style="margin-top:10px; margin-bottom:0; flex-wrap:wrap; gap:6px;">
+        <select class="ps-select" data-role="group-team1" data-group-id="${group.id}">${teamOptions}</select>
+        <select class="ps-select" data-role="group-team2" data-group-id="${group.id}">${teamOptions}</select>
+        <select class="ps-select" data-role="group-ground" data-group-id="${group.id}">${groundOptions}</select>
+        <button class="ps-ghost-btn add-custom-group-match-btn" data-group-id="${group.id}">Add custom match</button>
       </div>
     </div>`;
 }
 
 function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
   const matchLines = round.matches.map(m => `
-    <div class="match-result-line" data-round-id="${round.id}" data-match-id="${m.id}">
+    <div class="ps-match-line" data-round-id="${round.id}" data-match-id="${m.id}">
       <b>${getTeam(m.team1Id)?.name}</b> ${formatSeasonScore(m.score1)} vs <b>${getTeam(m.team2Id)?.name}</b> ${formatSeasonScore(m.score2)}
-      ${m.groundName ? `<span class="hint-text"> · ${m.groundName}</span>` : ""}
-      ${isPlayed(m) ? (getWinnerId(m) ? ` — ${getTeam(getWinnerId(m))?.name} won` : " — tied") : `<button class="btn-ghost sim-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}" style="margin-left:8px;">Simulate</button>`}
-      <button class="sq-remove-btn remove-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}" style="margin-left:8px;">Remove</button>
+      ${m.groundName ? `<span class="ps-dim">· ${m.groundName}</span>` : ""}
+      ${isPlayed(m) ? (getWinnerId(m) ? `<span class="ps-dim">— ${getTeam(getWinnerId(m))?.name} won</span>` : `<span class="ps-dim">— tied</span>`) : `<button class="ps-ghost-btn sim-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Simulate</button>`}
+      <button class="ps-remove-btn remove-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Remove</button>
     </div>`).join("");
   const teamOptions = season.teamIds.map(id => `<option value="${id}">${getTeam(id)?.name}</option>`).join("");
   const groundOptions = season.groundNames.map(name => `<option value="${name}">${name}</option>`).join("");
   return `
-    <div class="team-card">
-      <div class="team-card-header"><span style="font-size:20px; font-family:'Oswald',sans-serif; color:var(--pitch-light);">${round.name}</span><button class="sq-remove-btn remove-round-btn" data-round-id="${round.id}">Delete round</button></div>
-      ${matchLines || '<p class="hint-text">No matches yet.</p>'}
-      <div class="add-to-team-row">
-        <select data-role="ko-team1" data-round-id="${round.id}">${teamOptions}</select>
-        <select data-role="ko-team2" data-round-id="${round.id}">${teamOptions}</select>
-        <select data-role="ko-ground" data-round-id="${round.id}">${groundOptions}</select>
-        <button class="btn-ghost add-ko-match-btn" data-round-id="${round.id}">Add match</button>
+    <div class="ps-card">
+      <div class="ps-card-header-row"><span class="ps-card-title" style="margin-bottom:0;">${round.name}</span><button class="ps-remove-btn remove-round-btn" data-round-id="${round.id}">Delete round</button></div>
+      ${matchLines || '<p class="ps-empty">No matches yet.</p>'}
+      <div class="ps-card-header-row" style="margin-top:10px; margin-bottom:0; flex-wrap:wrap; gap:6px;">
+        <select class="ps-select" data-role="ko-team1" data-round-id="${round.id}">${teamOptions}</select>
+        <select class="ps-select" data-role="ko-team2" data-round-id="${round.id}">${teamOptions}</select>
+        <select class="ps-select" data-role="ko-ground" data-round-id="${round.id}">${groundOptions}</select>
+        <button class="ps-ghost-btn add-ko-match-btn" data-round-id="${round.id}">Add match</button>
       </div>
     </div>`;
 }
