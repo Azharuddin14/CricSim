@@ -202,36 +202,49 @@
   /* Squad-style player card (numbered badge + up/down order stack) —
      used in Select Teams for the batting-order reorder feature */
   .sq-player-card {
-    display: flex; align-items: center; gap: 10px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.08)), var(--panel);
-    border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; min-height: 46px;
-    font-family: 'Inter', sans-serif; font-size: 12.5px; transition: border-color 0.12s;
+    display: flex; align-items: center; gap: 12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.1)), var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    font-family: 'Inter', sans-serif; font-size: 12.5px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
   }
-  .sq-player-card:hover { border-color: rgba(45,106,79,0.5); }
+  .sq-player-card:hover { border-color: rgba(45,106,79,0.6); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
   .sq-order-num {
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    width: 22px; height: 22px; border-radius: 50%; background: var(--pitch-light); color: #05130b;
-    font-size: 11px; font-weight: 700; font-family: 'Inter', sans-serif;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: linear-gradient(180deg, var(--pitch-light), var(--pitch));
+    color: #05130b; font-size: 11.5px; font-weight: 700; font-family: 'Inter', sans-serif;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
   }
-  .sq-order-stack { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; margin: 0 2px; }
+  .sq-order-stack { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
   .sq-order-btn {
-    background: rgba(0,0,0,0.2); border: 1px solid var(--line); color: var(--cream-dim); border-radius: 4px;
-    width: 22px; height: 13px; font-size: 7px; cursor: pointer; padding: 0; line-height: 1;
-    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.25); border: 1px solid var(--line); color: var(--cream-dim); border-radius: 4px;
+    width: 20px; height: 15px; min-height: unset; font-size: 8px; cursor: pointer; padding: 0; line-height: 1;
+    display: flex; align-items: center; justify-content: center; transition: all 0.12s;
   }
-  .sq-order-btn:hover:not(:disabled) { color: var(--pitch-light); border-color: var(--pitch-light); background: rgba(27,67,50,0.3); }
+  .sq-order-btn:hover:not(:disabled) { color: var(--night); border-color: var(--pitch-light); background: var(--pitch-light); }
+  .sq-order-btn:active:not(:disabled) { transform: scale(0.9); }
   .sq-order-btn:disabled { opacity: 0.2; cursor: default; }
   .sq-card-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-  .sq-card-name { color: var(--cream); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sq-card-meta { color: var(--cream-dim); font-size: 10.5px; font-family: 'JetBrains Mono', monospace; }
-  .team-selector-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-  .team-selector-pill {
-    display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.04);
-    border: 1px solid var(--line); border-radius: 20px; padding: 7px 14px;
-    font-family: 'Inter', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--cream-dim); cursor: pointer;
+  .sq-card-name { color: var(--cream); font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sq-card-meta { color: var(--cream-dim); font-size: 10.5px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.01em; }
+  .sq-remove-btn {
+    flex-shrink: 0; background: rgba(193,68,60,0.08); border: 1px solid rgba(193,68,60,0.35);
+    color: var(--wicket); font-size: 11px; font-weight: 600; min-height: unset;
+    padding: 6px 12px; border-radius: 6px; transition: all 0.12s;
   }
-  .team-selector-pill.active { background: rgba(27,67,50,0.5); border-color: var(--pitch-light); color: var(--cream); }
-  .team-selector-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .sq-remove-btn:hover { background: rgba(193,68,60,0.18); border-color: var(--wicket); filter: none; }
+  .team-selector-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .team-selector-pill {
+    display: flex; align-items: center; gap: 7px; background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line); border-radius: 20px; padding: 8px 15px; min-height: unset;
+    font-family: 'Inter', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--cream-dim);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .team-selector-pill:hover { border-color: rgba(45,106,79,0.6); color: var(--cream); }
+  .team-selector-pill.active { background: rgba(27,67,50,0.55); border-color: var(--pitch-light); color: var(--cream); box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+  .team-selector-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 2px rgba(255,255,255,0.08); }
   .scroll-list .player-list { margin-bottom: 0; }
   .player-count { font-size: 11px; color: var(--cream-dim); margin: 4px 0 10px; }
   .player-count-warning { color: var(--wicket); font-weight: 600; }
@@ -1568,7 +1581,7 @@ function renderTeamsTab() {
         <span class="sq-card-name">${p.name}</span>
         <span class="sq-card-meta">Bat ${p.batting} · Bowl ${p.bowling}${p.isWicketKeeper ? " · WK" : ""}</span>
       </div>
-      <button class="card-info-btn remove-link" data-player-id="${p.id}" style="color:var(--wicket); font-size:12px; font-weight:600;">Remove</button>
+      <button class="sq-remove-btn remove-link" data-player-id="${p.id}">Remove</button>
     </div>`).join("");
   const available = unassignedPlayers();
   const addOptions = available.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
