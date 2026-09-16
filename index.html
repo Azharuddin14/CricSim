@@ -357,6 +357,16 @@
     padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; min-height: unset; flex-shrink: 0;
   }
   .ps-open-season-btn:hover { filter: brightness(1.15); }
+  .ps-summary-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 4px; }
+  .ps-summary-stat {
+    flex: 1 1 90px; background: rgba(27,67,50,0.06); border-radius: 8px; padding: 8px 10px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .ps-summary-stat b { font-family: 'Oswald', sans-serif; font-size: 20px; color: #1B4332; line-height: 1; }
+  .ps-summary-stat span { font-size: 10px; color: rgba(22,33,62,0.55); text-transform: uppercase; letter-spacing: 0.05em; }
+  .ps-info-details { margin-top: 10px; }
+  .ps-info-details summary { cursor: pointer; font-size: 11.5px; color: rgba(22,33,62,0.5); font-weight: 600; }
+  .ps-info-details summary:hover { color: #1B4332; }
   .scroll-list .player-list { margin-bottom: 0; }
   .player-count { font-size: 11px; color: var(--cream-dim); margin: 4px 0 10px; }
   .player-count-warning { color: var(--wicket); font-weight: 600; }
@@ -596,6 +606,19 @@
       <div id="seasonScorecardContent"></div>
       <div class="modal-actions" style="margin-top:14px;">
         <button type="button" class="btn-ghost" id="closeSeasonScorecardBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="addGroupOverlay" class="modal-overlay">
+    <div class="modal-box" style="max-width:500px;">
+      <h2>New Group</h2>
+      <label>Group name <input type="text" id="newGroupName" /></label>
+      <p class="hint-text" style="margin-top:10px;">Pick which teams belong to this group (must be full 11-player squads):</p>
+      <div class="tournament-team-checks" id="newGroupTeamChecks" style="max-height:260px; overflow-y:auto;"></div>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button type="button" class="btn-primary" id="confirmAddGroupBtn">Create group</button>
+        <button type="button" class="btn-ghost" id="cancelAddGroupBtn">Cancel</button>
       </div>
     </div>
   </div>
@@ -2414,7 +2437,6 @@ function renderSeasonsApp() {
 
 function renderSeasonsAppHome() {
   const body = document.getElementById("seasonsAppBody");
-  const eligibleTeams = appState.teams.filter(t => t.playerIds.length === 11);
   const seasonListHtml = appState.seasons.length === 0
     ? `<p class="ps-empty" style="color:rgba(245,239,220,0.5);">No seasons yet — create one above to get started.</p>`
     : appState.seasons.map(s => {
@@ -2423,11 +2445,12 @@ function renderSeasonsAppHome() {
         const championHtml = (finalMatch && isPlayed(finalMatch))
           ? `<div class="ps-champion-line">🏆 ${getTeam(getWinnerId(finalMatch))?.name || "Tied"}</div>`
           : `<div class="ps-dim" style="margin-top:4px; font-style:italic;">In progress</div>`;
+        const teamCount = seasonTeamIds(s).length;
         return `
         <div class="ps-season-list-card" data-season-id="${s.id}">
           <div style="flex:1 1 auto; min-width:0;">
             <div class="ps-season-list-name">${s.name}</div>
-            <div class="ps-season-list-meta">${(s.groundNames || []).join(", ") || "No ground set"} · ${s.teamIds.length} teams · ${s.oversPerMatch || 20} overs/match</div>
+            <div class="ps-season-list-meta">${s.groups.length} groups · ${teamCount} teams · ${s.oversPerMatch || 20} overs/match</div>
             ${championHtml}
           </div>
           <button class="ps-open-season-btn open-season-btn" data-season-id="${s.id}">Open</button>
@@ -2448,8 +2471,7 @@ function renderSeasonsAppHome() {
       </div>
       <p class="ps-stat-heading" style="margin-top:12px;">Grounds (fixtures rotate across them at random)</p>
       <div class="tournament-team-checks" id="newSeasonGrounds" style="max-height:180px; overflow-y:auto; color:#16213E;">${allGrounds().map(g => `<label><input type="checkbox" value="${g.name}" /> ${g.name}</label>`).join("")}</div>
-      <p class="ps-stat-heading" style="margin-top:12px;">Teams (must be full 11-player squads)</p>
-      <div class="tournament-team-checks" style="color:#16213E;">${eligibleTeams.map(t => `<label><input type="checkbox" value="${t.id}" /> ${t.name}</label>`).join("") || '<p class="ps-empty">No full teams available yet.</p>'}</div>
+      <p class="ps-dim" style="margin-top:8px;">Teams are picked per-group once the season is created, not here.</p>
     </div>
     ${seasonListHtml}
   `;
@@ -2466,10 +2488,8 @@ function renderSeasonsAppHome() {
     const name = document.getElementById("newSeasonName").value || "New Season";
     const oversPerMatch = Number(document.getElementById("newSeasonOvers").value) || 20;
     const groundNames = [...document.querySelectorAll('#newSeasonGrounds input:checked')].map(c => c.value);
-    const teamIds = [...body.querySelectorAll('.tournament-team-checks:not(#newSeasonGrounds) input:checked')].map(c => Number(c.value));
-    if (teamIds.length < 2) { alert("Pick at least 2 teams for the season."); return; }
     if (groundNames.length === 0) { alert("Pick at least 1 ground for the season."); return; }
-    const season = { id: nextId++, name, oversPerMatch, groundNames, teamIds, groups: [], knockoutRounds: [] };
+    const season = { id: nextId++, name, oversPerMatch, groundNames, groups: [], knockoutRounds: [] };
     appState.seasons.push(season);
     seasonsAppActiveSeasonId = season.id;
     seasonsAppScreen = "detail";
@@ -2482,6 +2502,32 @@ function renderSeasonsAppHome() {
  * the same {teamAName, teamBName, result} record computeAggregateStats and
  * getMomTallyAllMatches already expect — so season-scoped leaderboards can
  * reuse the exact same aggregation logic as the all-time Records tab. */
+/** Every team that actually participates in this season — the union of
+ * each group's own team list, since teams are picked per-group now
+ * rather than once for the whole season up front. */
+function seasonTeamIds(season) {
+  return Array.from(new Set(season.groups.flatMap(g => g.teamIds)));
+}
+
+function openAddGroupModal(season) {
+  const modal = document.getElementById("addGroupOverlay");
+  const eligibleTeams = appState.teams.filter(t => t.playerIds.length === 11);
+  document.getElementById("newGroupName").value = `Group ${String.fromCharCode(65 + season.groups.length)}`;
+  document.getElementById("newGroupTeamChecks").innerHTML = eligibleTeams.map(t => `<label><input type="checkbox" value="${t.id}" /> ${t.name}</label>`).join("") || '<p class="hint-text">No full 11-player teams available yet — build one in Select Teams.</p>';
+  modal.style.display = "flex";
+  document.getElementById("cancelAddGroupBtn").onclick = () => { modal.style.display = "none"; };
+  document.getElementById("confirmAddGroupBtn").onclick = () => {
+    const name = document.getElementById("newGroupName").value.trim();
+    const teamIds = [...document.querySelectorAll('#newGroupTeamChecks input:checked')].map(c => Number(c.value));
+    if (!name) { alert("Give the group a name."); return; }
+    if (teamIds.length < 2) { alert("Pick at least 2 teams for this group."); return; }
+    season.groups.push({ id: nextId++, name, teamIds, matches: [] });
+    persistState();
+    modal.style.display = "none";
+    renderSeasonsAppDetail();
+  };
+}
+
 function seasonPlayedMatchRecords(season) {
   const records = [];
   const allMatches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)];
@@ -2575,17 +2621,28 @@ function renderSeasonsAppDetail() {
       </div>`;
   }
 
+  const allSeasonMatches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)];
+  const playedCount = allSeasonMatches.filter(isPlayed).length;
+  const teamCount = seasonTeamIds(season).length;
+
   body.innerHTML = `
     <button class="ps-back-btn" id="backToSeasonsHomeBtn">← All seasons</button>
     <div class="ps-card">
-      <div class="ps-card-header-row" style="margin-bottom:0;">
+      <div class="ps-card-header-row" style="margin-bottom:8px;">
         <span class="ps-card-title" style="margin-bottom:0;">${season.name}</span>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span class="ps-dim">${season.groundNames.join(", ")} · ${totalOvers} overs/match</span>
-          <button class="ps-remove-btn delete-season-btn" data-season-id="${season.id}">Delete Season</button>
-        </div>
+        <button class="ps-remove-btn delete-season-btn" data-season-id="${season.id}">Delete Season</button>
+      </div>
+      <div class="ps-summary-row">
+        <div class="ps-summary-stat"><b>${teamCount}</b><span>Teams</span></div>
+        <div class="ps-summary-stat"><b>${playedCount}</b><span>Matches played</span></div>
+        <div class="ps-summary-stat"><b>${allSeasonMatches.length}</b><span>Matches scheduled</span></div>
+        <div class="ps-summary-stat"><b>${totalOvers}</b><span>Overs/match</span></div>
       </div>
       ${championHtml}
+      <details class="ps-info-details">
+        <summary>Ground details</summary>
+        <p class="ps-dim" style="margin:6px 0 0;">${season.groundNames.join(", ")}</p>
+      </details>
     </div>
     ${subtabHtml}
     <div id="seasonsDetailContent">${contentHtml}</div>
@@ -2604,13 +2661,7 @@ function renderSeasonsAppDetail() {
   });
 
   if (seasonsDetailTab === "matches") {
-    document.getElementById("addGroupBtn").onclick = () => {
-      const name = prompt("Group name?", `Group ${String.fromCharCode(65 + season.groups.length)}`);
-      if (!name) return;
-      season.groups.push({ id: nextId++, name, teamIds: [...season.teamIds], matches: [] });
-      persistState();
-      renderSeasonsAppDetail();
-    };
+    document.getElementById("addGroupBtn").onclick = () => openAddGroupModal(season);
     document.getElementById("addRoundBtn").onclick = () => {
       const name = prompt("Round name?", season.knockoutRounds.length === 0 ? "Semi Final" : "Final");
       if (!name) return;
@@ -2685,7 +2736,7 @@ function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
       ${isPlayed(m) ? `<span class="ps-dim">${getWinnerId(m) ? getTeam(getWinnerId(m))?.name + " won" : "tied"}</span><button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>` : `<button class="ps-ghost-btn sim-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Simulate</button>`}
       <button class="ps-remove-btn remove-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Remove</button>
     </div>`).join("");
-  const teamOptions = season.teamIds.map(id => `<option value="${id}">${getTeam(id)?.name}</option>`).join("");
+  const teamOptions = seasonTeamIds(season).map(id => `<option value="${id}">${getTeam(id)?.name}</option>`).join("");
   const groundOptions = season.groundNames.map(name => `<option value="${name}">${name}</option>`).join("");
   return `
     <div class="ps-card">
