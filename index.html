@@ -281,8 +281,8 @@
     font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 6px; min-height: unset;
   }
   .ps-remove-btn:hover { background: rgba(193,68,60,0.18); }
-  .ps-select {
-    background: #fff; border: 1px solid rgba(27,67,50,0.25); color: #16213E; border-radius: 6px;
+  input.ps-select, select.ps-select {
+    background: #fff !important; border: 1px solid rgba(27,67,50,0.25); color: #16213E !important; border-radius: 6px;
     padding: 6px 9px; font-size: 12.5px; font-family: 'Inter', sans-serif; min-height: unset;
   }
   .ps-standings-table thead th { background: #1B4332; color: #E8A33D; font-family: 'Oswald', sans-serif; font-weight: 400; padding: 7px 9px; text-align: left; }
@@ -305,7 +305,7 @@
   /* These two modals can be opened from *inside* the Seasons overlay
      (z-index: 100), so they need to sit above it — otherwise they open
      correctly but render completely hidden behind it. */
-  #seasonLiveOverlay, #seasonScorecardOverlay { z-index: 110; }
+  #seasonLiveOverlay, #seasonScorecardOverlay, #addGroupOverlay, #editSeasonOverlay { z-index: 110; }
   .seasons-app-overlay.open { display: flex; }
   .ps-header {
     background: #1B4332; border-bottom: 4px solid #E8A33D; padding: 18px 20px;
@@ -619,6 +619,20 @@
       <div class="modal-actions" style="margin-top:14px;">
         <button type="button" class="btn-primary" id="confirmAddGroupBtn">Create group</button>
         <button type="button" class="btn-ghost" id="cancelAddGroupBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="editSeasonOverlay" class="modal-overlay">
+    <div class="modal-box" style="max-width:500px;">
+      <h2>Edit Season</h2>
+      <label>Season name <input type="text" id="editSeasonName" /></label>
+      <label style="margin-top:10px;">Overs/match <input type="number" id="editSeasonOvers" min="1" /></label>
+      <p class="hint-text" style="margin-top:10px;">Grounds (fixtures rotate across them at random):</p>
+      <div class="tournament-team-checks" id="editSeasonGrounds" style="max-height:220px; overflow-y:auto;"></div>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button type="button" class="btn-primary" id="confirmEditSeasonBtn">Save changes</button>
+        <button type="button" class="btn-ghost" id="cancelEditSeasonBtn">Cancel</button>
       </div>
     </div>
   </div>
@@ -2509,6 +2523,29 @@ function seasonTeamIds(season) {
   return Array.from(new Set(season.groups.flatMap(g => g.teamIds)));
 }
 
+function openEditSeasonModal(season) {
+  const modal = document.getElementById("editSeasonOverlay");
+  document.getElementById("editSeasonName").value = season.name;
+  document.getElementById("editSeasonOvers").value = season.oversPerMatch || 20;
+  document.getElementById("editSeasonGrounds").innerHTML = allGrounds().map(g =>
+    `<label><input type="checkbox" value="${g.name}" ${season.groundNames.includes(g.name) ? "checked" : ""} /> ${g.name}</label>`).join("");
+  modal.style.display = "flex";
+  document.getElementById("cancelEditSeasonBtn").onclick = () => { modal.style.display = "none"; };
+  document.getElementById("confirmEditSeasonBtn").onclick = () => {
+    const name = document.getElementById("editSeasonName").value.trim();
+    const oversPerMatch = Number(document.getElementById("editSeasonOvers").value) || 20;
+    const groundNames = [...document.querySelectorAll('#editSeasonGrounds input:checked')].map(c => c.value);
+    if (!name) { alert("Give the season a name."); return; }
+    if (groundNames.length === 0) { alert("Pick at least 1 ground."); return; }
+    season.name = name;
+    season.oversPerMatch = oversPerMatch;
+    season.groundNames = groundNames;
+    persistState();
+    modal.style.display = "none";
+    renderSeasonsAppDetail();
+  };
+}
+
 function openAddGroupModal(season) {
   const modal = document.getElementById("addGroupOverlay");
   const eligibleTeams = appState.teams.filter(t => t.playerIds.length === 11);
@@ -2630,7 +2667,10 @@ function renderSeasonsAppDetail() {
     <div class="ps-card">
       <div class="ps-card-header-row" style="margin-bottom:8px;">
         <span class="ps-card-title" style="margin-bottom:0;">${season.name}</span>
-        <button class="ps-remove-btn delete-season-btn" data-season-id="${season.id}">Delete Season</button>
+        <div style="display:flex; gap:8px;">
+          <button class="ps-ghost-btn edit-season-btn">Edit</button>
+          <button class="ps-remove-btn delete-season-btn" data-season-id="${season.id}">Delete Season</button>
+        </div>
       </div>
       <div class="ps-summary-row">
         <div class="ps-summary-stat"><b>${teamCount}</b><span>Teams</span></div>
@@ -2648,6 +2688,7 @@ function renderSeasonsAppDetail() {
     <div id="seasonsDetailContent">${contentHtml}</div>
   `;
 
+  body.querySelector(".edit-season-btn").onclick = () => openEditSeasonModal(season);
   body.querySelector(".delete-season-btn").onclick = () => {
     if (!confirm("Delete this season and all its data?")) return;
     appState.seasons = appState.seasons.filter(s => s.id !== season.id);
@@ -2708,7 +2749,7 @@ function renderGroupCard(season, group, pitch, totalOvers) {
       ${isPlayed(m) ? `<button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>` : `<button class="ps-ghost-btn sim-match-btn" data-group-id="${group.id}" data-match-id="${m.id}">Simulate</button>`}
       <button class="ps-remove-btn remove-group-match-btn" data-group-id="${group.id}" data-match-id="${m.id}">Remove</button>
     </div>`).join("");
-  const teamOptions = group.teamIds.map(id => `<option value="${id}">${getTeam(id)?.name}</option>`).join("");
+  const teamOptions = appState.teams.filter(t => t.playerIds.length === 11).map(t => `<option value="${t.id}">${t.name}</option>`).join("");
   const groundOptions = season.groundNames.map(name => `<option value="${name}">${name}</option>`).join("");
   return `
     <div class="ps-card">
@@ -2736,7 +2777,7 @@ function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
       ${isPlayed(m) ? `<span class="ps-dim">${getWinnerId(m) ? getTeam(getWinnerId(m))?.name + " won" : "tied"}</span><button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>` : `<button class="ps-ghost-btn sim-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Simulate</button>`}
       <button class="ps-remove-btn remove-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Remove</button>
     </div>`).join("");
-  const teamOptions = seasonTeamIds(season).map(id => `<option value="${id}">${getTeam(id)?.name}</option>`).join("");
+  const teamOptions = appState.teams.filter(t => t.playerIds.length === 11).map(t => `<option value="${t.id}">${t.name}</option>`).join("");
   const groundOptions = season.groundNames.map(name => `<option value="${name}">${name}</option>`).join("");
   return `
     <div class="ps-card">
