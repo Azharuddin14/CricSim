@@ -357,15 +357,38 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
   // a bowler with no recognized bowling skill ("X") is a genuine part-timer
   // — never worth more than 2 overs across the whole innings regardless of
   // their raw rating or how short the team is on options
-  const capped = b => {
-    // "X" (no special skill) only means a genuine part-timer if their
-    // bowling rating is actually low — a high-rated bowler with no flavor
-    // skill assigned is still a real frontline option, not a batter who
-    // occasionally rolls their arm over
+  const capFor = b => {
     const isGenuinePartTimer = b.bowlingSkill === "None" && b.bowling < 60;
-    return (oversBowledMap.get(b) || 0) >= (isGenuinePartTimer ? Math.min(2, generalMax) : generalMax);
+    return isGenuinePartTimer ? Math.min(2, generalMax) : generalMax;
   };
+  const capped = b => (oversBowledMap.get(b) || 0) >= capFor(b);
   const deathPhase = over >= totalOvers - 4;
+
+  // Whole-innings lookahead: with a small bowling attack (e.g. exactly 5
+  // bowlers × 4 overs = 20), greedy over-by-over selection can paint
+  // itself into a corner late on — everyone left is either already
+  // capped or was the very last bowler, forcing the 4-over cap to bend
+  // even though a smarter rotation earlier would have avoided it
+  // entirely. This checks, before committing to a pick, whether the
+  // *remaining* overs can still be legally completed afterward (enough
+  // total capacity left, and no single bowler holding more than half of
+  // what's left) — the same feasibility condition behind any "no two
+  // adjacent the same" scheduling problem. A captain does this kind of
+  // arithmetic instinctively; this makes the engine do it too.
+  const remainingOversAfterThis = totalOvers - over;
+  function feasibleAfterPicking(candidate) {
+    if (remainingOversAfterThis <= 0) return true;
+    let maxRemaining = 0, totalRemaining = 0;
+    for (const b of eligible) {
+      const used = (oversBowledMap.get(b) || 0) + (b === candidate ? 1 : 0);
+      const remaining = Math.max(0, capFor(b) - used);
+      totalRemaining += remaining;
+      if (remaining > maxRemaining) maxRemaining = remaining;
+    }
+    if (totalRemaining < remainingOversAfterThis) return false;
+    if (maxRemaining > Math.ceil(remainingOversAfterThis / 2)) return false;
+    return true;
+  }
 
   // Reserve the team's best death specialist — but only once they're down
   // to their last couple of overs of eligibility. This lets them still open
@@ -389,6 +412,12 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
   // gets hard-blocked out of an over just because their strongest options
   // happen to be an off-phase type.
   let candidates = pool.filter(b => !capped(b) && b !== lastOverBowler);
+  // Among the normally-eligible candidates, prefer ones that keep the
+  // rest of the innings legally completable — only fall back to the
+  // full (possibly infeasible-looking) set if every option would
+  // otherwise create a future dead-end anyway.
+  const feasibleCandidates = candidates.filter(feasibleAfterPicking);
+  if (feasibleCandidates.length > 0) candidates = feasibleCandidates;
   let mustRelaxCap = false;
   if (candidates.length === 0) {
     // Before ever bending the 4-over cap for an already-selected bowler,
@@ -398,7 +427,10 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
     // relaxing it, same as a real captain would rather toss the ball to
     // someone unusual than break the over limit.
     const emergencyPool = (fullTeam || eligible).filter(b => b.bowlingStyle !== "Does Not Bowl" && !capped(b) && b !== lastOverBowler);
-    if (emergencyPool.length > 0) {
+    const feasibleEmergency = emergencyPool.filter(feasibleAfterPicking);
+    if (feasibleEmergency.length > 0) {
+      candidates = feasibleEmergency;
+    } else if (emergencyPool.length > 0) {
       candidates = emergencyPool;
     } else {
       candidates = pool.filter(b => b !== lastOverBowler);
