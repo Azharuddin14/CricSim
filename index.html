@@ -375,8 +375,8 @@
   .ps-match-score-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-family: 'Inter', sans-serif; font-size: 13px; color: #16213E; }
   .ps-match-score-row b { color: #1B4332; }
   .ps-match-score-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; text-align: right; flex-shrink: 0; }
-  .ps-match-result-row { font-size: 11.5px; color: rgba(22,33,62,0.65); margin-top: 5px; }
-  .ps-match-mom-row { font-size: 11px; color: rgba(22,33,62,0.55); margin-top: 2px; }
+  .ps-match-result-row { font-size: 10px; color: rgba(22,33,62,0.65); margin-top: 5px; }
+  .ps-match-mom-row { font-size: 9.5px; color: rgba(22,33,62,0.55); margin-top: 2px; }
   .ps-match-ground-row { font-size: 11px; color: rgba(22,33,62,0.5); margin-top: 2px; }
   .ps-match-actions-row { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
   .ps-source-badge {
@@ -389,8 +389,8 @@
   .match-history-score-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-family: 'Inter', sans-serif; font-size: 13px; color: var(--cream); }
   .match-history-score-row b { color: var(--amber); }
   .match-history-score-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; text-align: right; flex-shrink: 0; color: var(--cream); }
-  .match-history-result-row { font-size: 11.5px; color: var(--cream-dim); margin-top: 5px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-  .match-history-mom-row { font-size: 11px; color: var(--cream-dim); margin-top: 2px; }
+  .match-history-result-row { font-size: 10px; color: var(--cream-dim); margin-top: 5px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .match-history-mom-row { font-size: 9.5px; color: var(--cream-dim); margin-top: 2px; }
   .match-history-ground-row { font-size: 11px; color: var(--cream-dim); margin-top: 2px; }
   .match-history-actions-row { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
   .scroll-list .player-list { margin-bottom: 0; }
@@ -2048,6 +2048,28 @@ function getWinnerId(match) {
   if (r1 === r2) return match.tieWinnerId || null;
   return r1 > r2 ? match.team1Id : match.team2Id;
 }
+/** The team that actually batted first should always display on top —
+ * team1/team2 order is just bookkeeping, not the real batting order. */
+function battingOrderedIds(match) {
+  const firstId = match.battingFirstId || match.team1Id;
+  const secondId = firstId === match.team1Id ? match.team2Id : match.team1Id;
+  return [firstId, secondId];
+}
+function battingOrderedScores(match) {
+  const [firstId] = battingOrderedIds(match);
+  return firstId === match.team1Id ? [match.score1, match.score2] : [match.score2, match.score1];
+}
+/** "RCB won by 8 runs" / "MI won by 8 wickets" / "Match tied" — the raw
+ * margin string from the engine never includes who actually won it. */
+function formatMatchResultLine(match) {
+  if (!isPlayed(match)) return "";
+  const margin = match.fullResult ? match.fullResult.margin : null;
+  if (margin === "Match tied" || (!margin && !getWinnerId(match))) return "Match tied";
+  const winnerId = getWinnerId(match);
+  const winnerName = getTeam(winnerId)?.name || "";
+  if (margin) return `${winnerName} ${margin}`;
+  return `${winnerName} won`;
+}
 /** Standard net-run-rate standings: 2 points a win, 1 each on a tie, ranked
  * by points then NRR (runs-per-over scored minus runs-per-over conceded). */
 function computeStandings(teamIds, matches, matchOvers) {
@@ -2146,6 +2168,7 @@ function playSeasonMatchLive(match, seasonPitch, totalOvers, onDone) {
       recordMatch({
         groundName: pitch.__groundName || "Custom", teamAName: teamA.name, teamBName: teamB.name,
         teamAColor: teamA.color, teamBColor: teamB.color, result, tournamentId: null, source: "season",
+        seasonMatchId: match.id,
       });
       closeBtn.style.display = "";
       closeBtn.onclick = () => { overlay.style.display = "none"; if (onDone) onDone(); };
@@ -2172,13 +2195,15 @@ function simulateSeasonMatch(match, seasonPitch, totalOvers) {
   recordMatch({
     groundName: pitch.__groundName || "Custom", teamAName: teamA.name, teamBName: teamB.name,
     teamAColor: teamA.color, teamBColor: teamB.color, result, tournamentId: null, source: "season",
+    seasonMatchId: match.id,
   });
 }
 
-function recordMatch({ groundName, teamAName, teamBName, teamAColor, teamBColor, result, tournamentId, source }) {
+function recordMatch({ groundName, teamAName, teamBName, teamAColor, teamBColor, result, tournamentId, source, seasonId, seasonMatchId }) {
   appState.matches.push({
     id: nextId++, timestamp: Date.now(), groundName,
     teamAName, teamBName, teamAColor, teamBColor, result, tournamentId, source: source || "quickmatch",
+    seasonId: seasonId || null, seasonMatchId: seasonMatchId || null,
   });
   persistState();
 }
@@ -2281,11 +2306,14 @@ function renderStatsTab() {
   historyEl.innerHTML = sorted.map(m => {
     const mom = m.result.motm ? `${m.result.motm.name} (${m.result.motm.teamName})` : "";
     const sourceLabel = m.source === "season" ? "Season" : "Quick Match";
+    const winnerName = m.result.margin === "Match tied" ? null
+      : (m.result.second.runs > m.result.first.runs ? m.result.secondTeamName : m.result.firstTeamName);
+    const resultText = winnerName ? `${winnerName} ${m.result.margin}` : "Match tied";
     return `
     <div class="match-history-card" data-match-id="${m.id}">
       <div class="match-history-score-row"><b>${m.result.firstTeamName}</b><span class="match-history-score-value">${m.result.first.scoreText}</span></div>
       <div class="match-history-score-row"><b>${m.result.secondTeamName}</b><span class="match-history-score-value">${m.result.second.scoreText}</span></div>
-      <div class="match-history-result-row">${m.result.margin} <span class="ps-source-badge ${m.source === "season" ? "season" : "quickmatch"}">${sourceLabel}</span></div>
+      <div class="match-history-result-row">${resultText} <span class="ps-source-badge ${m.source === "season" ? "season" : "quickmatch"}">${sourceLabel}</span></div>
       ${mom ? `<div class="match-history-mom-row">Player of the Match: ${mom}</div>` : ""}
       <div class="match-history-ground-row">${m.groundName}</div>
       <div class="match-history-actions-row">
@@ -2453,7 +2481,7 @@ function renderRecordsTab() {
 
   const momTally = getMomTallyAllMatches(matches).slice(0, 10);
   document.getElementById("recordsMomTally").innerHTML = momTally.length === 0 ? empty : `
-    <table class="points-table"><thead><tr><th>#</th><th>Player</th><th>Team</th><th>MOM</th></tr></thead>
+    <table class="points-table"><thead><tr><th>#</th><th>Player</th><th>Team</th><th class="ps-num-head">MOM</th></tr></thead>
     <tbody>${momTally.map((p, i) => `<tr><td>${i+1}</td><td>${p.name}</td><td>${p.teamName}</td><td class="mono"><b>${p.count}</b></td></tr>`).join("")}</tbody></table>`;
 
   const topBatting = getTopBattingPerformances(matches, 10);
@@ -2736,6 +2764,8 @@ function renderSeasonsAppDetail() {
   body.querySelector(".edit-season-btn").onclick = () => openEditSeasonModal(season);
   body.querySelector(".delete-season-btn").onclick = () => {
     if (!confirm("Delete this season and all its data?")) return;
+    const allMatchIds = new Set([...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)].map(m => m.id));
+    appState.matches = appState.matches.filter(hm => !hm.seasonMatchId || !allMatchIds.has(hm.seasonMatchId));
     appState.seasons = appState.seasons.filter(s => s.id !== season.id);
     seasonsAppScreen = "home";
     renderSeasonsApp();
@@ -2788,10 +2818,11 @@ function renderGroupCard(season, group, pitch, totalOvers) {
     <td class="ps-mono">${s.lost}</td><td class="ps-mono">${s.tied}</td><td class="ps-mono">${s.nrr.toFixed(3)}</td><td class="ps-mono"><b>${s.points}</b></td></tr>
   `).join("");
   const matchLines = group.matches.map(m => {
+    const [firstId, secondId] = battingOrderedIds(m);
     if (!isPlayed(m)) {
       return `
       <div class="ps-match-card" data-group-id="${group.id}" data-match-id="${m.id}">
-        <div class="ps-match-score-row"><b>${getTeam(m.team1Id)?.name}</b> vs <b>${getTeam(m.team2Id)?.name}</b></div>
+        <div class="ps-match-score-row"><b>${getTeam(firstId)?.name}</b> vs <b>${getTeam(secondId)?.name}</b></div>
         ${m.groundName ? `<div class="ps-match-ground-row">${m.groundName}</div>` : ""}
         <div class="ps-match-actions-row">
           <button class="ps-ghost-btn sim-match-btn" data-group-id="${group.id}" data-match-id="${m.id}">Simulate</button>
@@ -2799,12 +2830,12 @@ function renderGroupCard(season, group, pitch, totalOvers) {
         </div>
       </div>`;
     }
-    const winnerId = getWinnerId(m);
+    const [firstScore, secondScore] = battingOrderedScores(m);
     return `
       <div class="ps-match-card" data-group-id="${group.id}" data-match-id="${m.id}">
-        <div class="ps-match-score-row"><b>${getTeam(m.team1Id)?.name}</b><span class="ps-match-score-value">${formatSeasonScore(m.score1)}</span></div>
-        <div class="ps-match-score-row"><b>${getTeam(m.team2Id)?.name}</b><span class="ps-match-score-value">${formatSeasonScore(m.score2)}</span></div>
-        <div class="ps-match-result-row">${m.fullResult ? m.fullResult.margin : (winnerId ? `${getTeam(winnerId)?.name} won` : "Match tied")}</div>
+        <div class="ps-match-score-row"><b>${getTeam(firstId)?.name}</b><span class="ps-match-score-value">${formatSeasonScore(firstScore)}</span></div>
+        <div class="ps-match-score-row"><b>${getTeam(secondId)?.name}</b><span class="ps-match-score-value">${formatSeasonScore(secondScore)}</span></div>
+        <div class="ps-match-result-row">${formatMatchResultLine(m)}</div>
         ${m.mom ? `<div class="ps-match-mom-row">Player of the Match: ${m.mom}</div>` : ""}
         <div class="ps-match-actions-row">
           <button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>
@@ -2834,10 +2865,11 @@ function renderGroupCard(season, group, pitch, totalOvers) {
 
 function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
   const matchLines = round.matches.map(m => {
+    const [firstId, secondId] = battingOrderedIds(m);
     if (!isPlayed(m)) {
       return `
       <div class="ps-match-card" data-round-id="${round.id}" data-match-id="${m.id}">
-        <div class="ps-match-score-row"><b>${getTeam(m.team1Id)?.name}</b> vs <b>${getTeam(m.team2Id)?.name}</b></div>
+        <div class="ps-match-score-row"><b>${getTeam(firstId)?.name}</b> vs <b>${getTeam(secondId)?.name}</b></div>
         ${m.groundName ? `<div class="ps-match-ground-row">${m.groundName}</div>` : ""}
         <div class="ps-match-actions-row">
           <button class="ps-ghost-btn sim-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Simulate</button>
@@ -2845,12 +2877,12 @@ function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
         </div>
       </div>`;
     }
-    const winnerId = getWinnerId(m);
+    const [firstScore, secondScore] = battingOrderedScores(m);
     return `
       <div class="ps-match-card" data-round-id="${round.id}" data-match-id="${m.id}">
-        <div class="ps-match-score-row"><b>${getTeam(m.team1Id)?.name}</b><span class="ps-match-score-value">${formatSeasonScore(m.score1)}</span></div>
-        <div class="ps-match-score-row"><b>${getTeam(m.team2Id)?.name}</b><span class="ps-match-score-value">${formatSeasonScore(m.score2)}</span></div>
-        <div class="ps-match-result-row">${m.fullResult ? m.fullResult.margin : (winnerId ? `${getTeam(winnerId)?.name} won` : "Match tied")}</div>
+        <div class="ps-match-score-row"><b>${getTeam(firstId)?.name}</b><span class="ps-match-score-value">${formatSeasonScore(firstScore)}</span></div>
+        <div class="ps-match-score-row"><b>${getTeam(secondId)?.name}</b><span class="ps-match-score-value">${formatSeasonScore(secondScore)}</span></div>
+        <div class="ps-match-result-row">${formatMatchResultLine(m)}</div>
         ${m.mom ? `<div class="ps-match-mom-row">Player of the Match: ${m.mom}</div>` : ""}
         <div class="ps-match-actions-row">
           <button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>
@@ -2900,7 +2932,9 @@ function wireGroupCards(season, pitch, totalOvers) {
   document.querySelectorAll(".remove-group-match-btn").forEach(btn => {
     btn.onclick = () => {
       const group = season.groups.find(g => g.id === Number(btn.dataset.groupId));
-      group.matches = group.matches.filter(m => m.id !== Number(btn.dataset.matchId));
+      const matchId = Number(btn.dataset.matchId);
+      group.matches = group.matches.filter(m => m.id !== matchId);
+      appState.matches = appState.matches.filter(hm => hm.seasonMatchId !== matchId);
       persistState();
       renderSeasonsAppDetail();
     };
@@ -2919,7 +2953,11 @@ function wireGroupCards(season, pitch, totalOvers) {
   });
   document.querySelectorAll(".remove-group-btn").forEach(btn => {
     btn.onclick = () => {
-      season.groups = season.groups.filter(g => g.id !== Number(btn.dataset.groupId));
+      const groupId = Number(btn.dataset.groupId);
+      const group = season.groups.find(g => g.id === groupId);
+      const matchIds = new Set(group.matches.map(m => m.id));
+      appState.matches = appState.matches.filter(hm => !hm.seasonMatchId || !matchIds.has(hm.seasonMatchId));
+      season.groups = season.groups.filter(g => g.id !== groupId);
       persistState();
       renderSeasonsAppDetail();
     };
@@ -2949,14 +2987,20 @@ function wireKnockoutCards(season, pitch, totalOvers) {
   document.querySelectorAll(".remove-ko-match-btn").forEach(btn => {
     btn.onclick = () => {
       const round = season.knockoutRounds.find(r => r.id === Number(btn.dataset.roundId));
-      round.matches = round.matches.filter(m => m.id !== Number(btn.dataset.matchId));
+      const matchId = Number(btn.dataset.matchId);
+      round.matches = round.matches.filter(m => m.id !== matchId);
+      appState.matches = appState.matches.filter(hm => hm.seasonMatchId !== matchId);
       persistState();
       renderSeasonsAppDetail();
     };
   });
   document.querySelectorAll(".remove-round-btn").forEach(btn => {
     btn.onclick = () => {
-      season.knockoutRounds = season.knockoutRounds.filter(r => r.id !== Number(btn.dataset.roundId));
+      const roundId = Number(btn.dataset.roundId);
+      const round = season.knockoutRounds.find(r => r.id === roundId);
+      const matchIds = new Set(round.matches.map(m => m.id));
+      appState.matches = appState.matches.filter(hm => !hm.seasonMatchId || !matchIds.has(hm.seasonMatchId));
+      season.knockoutRounds = season.knockoutRounds.filter(r => r.id !== roundId);
       persistState();
       renderSeasonsAppDetail();
     };
