@@ -248,12 +248,14 @@
   .add-player-list { max-height: 260px; overflow-y: auto; border-radius: 8px; }
   .add-player-row {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    background: rgba(255,255,255,0.03); border-radius: 8px; padding: 9px 12px; margin-bottom: 6px;
+    background: rgba(255,255,255,0.03); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px;
+    cursor: pointer; transition: background 0.12s;
   }
+  .add-player-row:hover, .add-player-row:active { background: rgba(255,255,255,0.08); }
   .add-player-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .add-player-name { font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13.5px; color: var(--cream); }
   .add-player-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cream-dim); }
-  .add-player-btn { flex-shrink: 0; min-height: unset; padding: 6px 12px; font-size: 12px; }
+  .add-player-plus { flex-shrink: 0; color: var(--amber); font-size: 18px; font-weight: 600; line-height: 1; width: 20px; text-align: center; }
   .team-selector-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
   .team-selector-pill {
     display: flex; align-items: center; gap: 7px; background: rgba(255,255,255,0.04);
@@ -434,11 +436,6 @@
     font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 6px; min-height: 36px;
   }
   .edit-player-btn:hover { border-color: var(--pitch-light); background: rgba(84,122,84,0.12); }
-  .add-player-btn {
-    width: 100%; background: transparent; border: 1px dashed var(--line);
-    color: var(--cream-dim); font-size: 13px; padding: 10px; border-radius: 6px; min-height: 40px;
-  }
-  .add-player-btn:hover { border-color: var(--pitch-light); color: var(--cream); }
 
   .modal-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px);
@@ -464,7 +461,7 @@
     border-radius: 4px; padding: 7px 9px; font-family: 'Inter', sans-serif; font-size: 13px;
   }
   .modal-actions { display: flex; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
-  .btn-delete { background: transparent; border: none; color: var(--wicket); font-size: 13px; font-weight: 600; margin-left: auto; cursor: pointer; }
+  .btn-delete { background: transparent; border: none; color: var(--wicket); font-size: 13px; font-weight: 600; margin-left: auto; cursor: pointer; padding: 4px 8px; min-height: unset; }
   button {
     font-family: 'Inter', sans-serif;
     font-weight: 600;
@@ -2212,18 +2209,20 @@ function renderAvailablePlayersList(team) {
     const bowlText = (p.role === "purebatter" || p.role === "keeper") ? "" : `Bowl ${p.bowling}`;
     const meta = [batText, bowlText].filter(Boolean).join(" · ");
     return `
-    <div class="add-player-row" data-player-id="${p.id}">
+    <div class="add-player-row" data-player-id="${p.id}" role="button" tabindex="0">
       <div class="add-player-info">
         <span class="add-player-name">${p.name}${p.isWicketKeeper ? ` <span class="hint-text" style="font-size:10px;">WK</span>` : ""}</span>
         <span class="add-player-meta">${meta} · ${roleLabel}</span>
       </div>
-      <button class="btn-ghost add-player-btn" data-player-id="${p.id}">+ Add</button>
+      <span class="add-player-plus">+</span>
     </div>`;
   }).join("")}</div>`;
 
-  listEl.querySelectorAll(".add-player-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      team.playerIds.push(Number(btn.dataset.playerId));
+  // the whole row is the tap target — one tap on the player's name (or
+  // anywhere in the row) adds them, no separate small button to aim for
+  listEl.querySelectorAll(".add-player-row").forEach(row => {
+    row.addEventListener("click", () => {
+      team.playerIds.push(Number(row.dataset.playerId));
       renderTeamsTab();
     });
   });
