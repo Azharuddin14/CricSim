@@ -1580,6 +1580,31 @@ function seedDefaultData() {
 /** Saves the whole app state to localStorage. Called after every mutation
  * so a page reload (or reopening the installed PWA) picks up right where
  * things were left, matching the pattern Pitchside and Squad Ledger use. */
+/** A season match's fullResult carries the exact same heavy ball-by-ball
+ * detail as a regular recorded match — but unlike appState.matches
+ * (which now lives in IndexedDB), season matches are nested inside
+ * appState.seasons and were still going straight into the localStorage
+ * blob in full, which is exactly what kept hitting the quota again for
+ * anyone with more than a handful of season matches. This builds a
+ * lighter copy of the seasons array for saving — every match keeps its
+ * scores, wickets, MOM, and margin, just not the full timeline/over
+ * summaries — without touching the live in-memory data, so "View
+ * Scorecard" still shows full ball-by-ball detail for the rest of this
+ * session; only what gets persisted is trimmed.
+ */
+function seasonsForPersist() {
+  return appState.seasons.map(season => ({
+    ...season,
+    groups: season.groups.map(g => ({ ...g, matches: g.matches.map(stripHeavyMatchDetail) })),
+    knockoutRounds: season.knockoutRounds.map(r => ({ ...r, matches: r.matches.map(stripHeavyMatchDetail) })),
+  }));
+}
+function stripHeavyMatchDetail(m) {
+  if (!m.fullResult) return m;
+  const strip = inn => inn && { ...inn, timeline: [], oversSummary: [] };
+  return { ...m, fullResult: { ...m.fullResult, first: strip(m.fullResult.first), second: strip(m.fullResult.second) } };
+}
+
 function persistState() {
   // Matches live in IndexedDB now (see recordMatch / the various delete
   // handlers, which write/delete them there directly) — everything else
@@ -1587,10 +1612,13 @@ function persistState() {
   // the problem; it was specifically the full ball-by-ball match detail
   // that could grow to hundreds of matches worth of data and silently
   // blow the quota. Excluding matches here removes that pressure at the
-  // source rather than reacting to it after the fact.
+  // source rather than reacting to it after the fact. Season matches
+  // (below) carry the same kind of heavy detail nested inside
+  // appState.seasons, so they get trimmed the same way for the save.
   const { matches, ...appStateWithoutMatches } = appState;
+  const appStateForSave = { ...appStateWithoutMatches, seasons: seasonsForPersist() };
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ appState: appStateWithoutMatches, nextId }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ appState: appStateForSave, nextId }));
   } catch (e) {
     console.warn("Could not save app state to localStorage:", e);
     alert("Storage is full and couldn't be saved. Consider using \"Download DB\" to back up your data.");
