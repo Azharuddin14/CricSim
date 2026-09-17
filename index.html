@@ -527,6 +527,11 @@
     text-align: center; font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--amber); font-size: 12px; margin-bottom: 4px;
   }
+  .super-over-innings { margin-top: 10px; }
+  .super-over-innings-label {
+    font-family: 'Inter', sans-serif; font-weight: 600; font-size: 11px; color: var(--cream-dim);
+    margin: 8px 0 3px; text-transform: uppercase; letter-spacing: 0.03em;
+  }
   .motm-line {
     text-align: center;
     font-size: 12px;
@@ -628,7 +633,17 @@
         <select id="playerFilterRole"><option value="">All roles</option><option value="allrounder">All-rounder</option><option value="purebatter">Pure Batter</option><option value="keeper">Wicketkeeper</option><option value="purebowler">Pure Bowler</option></select>
         <select id="playerFilterSkill"><option value="">All skills</option></select>
         <select id="playerFilterBowlType"><option value="">Seam or spin</option><option value="seam">Seam</option><option value="spin">Spin</option></select>
-        <select id="playerFilterRating"><option value="0">Any rating</option><option value="90">90+</option><option value="80">80+</option><option value="70">70+</option><option value="60">60+</option></select>
+      </div>
+      <div class="player-filter-row">
+        <input type="number" id="playerFilterMinRating" placeholder="Min rating" min="0" max="100" style="flex:1 1 100px;" />
+        <input type="number" id="playerFilterMaxRating" placeholder="Max rating" min="0" max="100" style="flex:1 1 100px;" />
+        <select id="playerSortBy">
+          <option value="top">Sort: Top rating</option>
+          <option value="bat">Sort: Batting</option>
+          <option value="bowl">Sort: Bowling</option>
+          <option value="keeping">Sort: Keeping</option>
+          <option value="name">Sort: Name</option>
+        </select>
       </div>
       <div id="playerDbList"></div>
     </div>
@@ -1371,7 +1386,7 @@ function simulateMatch({ teamA, teamB, pitch, totalOvers, teamAName, teamBName }
     firstTeamName, secondTeamName,
     first: { ...first, scoreText: `${first.runs}${firstAllOut ? "" : `/${first.wickets}`}${firstAllOut ? "" : ` (${formatOvers(first.oversUsed)})`}` },
     second: { ...second, scoreText: `${second.runs}${secondAllOut ? "" : `/${second.wickets}`}${secondAllOut ? "" : ` (${formatOvers(second.oversUsed)})`}` },
-    margin, motm,
+    margin, motm, winnerTeamName,
   };
 }
 
@@ -1429,6 +1444,19 @@ function simulateSuperOver({ matchResult, teamA, teamB, pitch, attempt = 1 }) {
     first: { ...first, scoreText: `${first.runs}/${first.wickets} (${formatOvers(first.oversUsed)})` },
     second: { ...second, scoreText: `${second.runs}/${second.wickets} (${formatOvers(second.oversUsed)})` },
   };
+}
+
+/** Automatically resolves a tied match with a Super Over the instant the
+/** A tie resolves itself immediately with a Super Over — real cricket
+ * doesn't wait for anyone to press a button. The result stays "Match
+ * tied" (that genuinely happened), and result.superOver carries the
+ * decisive outcome; everything downstream (standings, records, the
+ * result line) reads result.superOver.winnerTeamName to award the win
+ * outright rather than counting it as a tie. */
+function resolveTieWithSuperOver(result, teamA, teamB, pitch) {
+  if (result.margin !== "Match tied" || result.superOver) return result;
+  result.superOver = simulateSuperOver({ matchResult: result, teamA, teamB, pitch });
+  return result;
 }
 
 // ============================================================
@@ -1938,14 +1966,21 @@ function renderPlayerDbList() {
   const roleFilter = document.getElementById("playerFilterRole").value;
   const skillFilter = document.getElementById("playerFilterSkill").value;
   const bowlTypeFilter = document.getElementById("playerFilterBowlType").value;
-  const ratingFilter = Number(document.getElementById("playerFilterRating").value) || 0;
+  const minRating = Number(document.getElementById("playerFilterMinRating").value) || 0;
+  const maxRating = Number(document.getElementById("playerFilterMaxRating").value) || 100;
+  const sortBy = document.getElementById("playerSortBy").value;
 
   let filtered = query ? appState.players.filter(p => p.name.toLowerCase().includes(query)) : appState.players;
   if (roleFilter) filtered = filtered.filter(p => (p.role || "allrounder") === roleFilter);
   if (skillFilter) filtered = filtered.filter(p => p.battingSkill === skillFilter || p.bowlingSkill === skillFilter);
   if (bowlTypeFilter === "seam") filtered = filtered.filter(p => SEAM_BOWLING_STYLES.includes(p.bowlingStyle));
   if (bowlTypeFilter === "spin") filtered = filtered.filter(p => SPIN_BOWLING_STYLES.includes(p.bowlingStyle));
-  if (ratingFilter > 0) filtered = filtered.filter(p => Math.max(p.batting, p.bowling) >= ratingFilter);
+  if (minRating > 0 || maxRating < 100) {
+    filtered = filtered.filter(p => {
+      const top = Math.max(p.batting, p.bowling);
+      return top >= minRating && top <= maxRating;
+    });
+  }
 
   if (appState.players.length === 0) {
     list.innerHTML = `<p class="hint-text">No players yet — add some to get started.</p>`;
@@ -1955,10 +1990,16 @@ function renderPlayerDbList() {
     list.innerHTML = `<p class="hint-text">No players match the current search/filters.</p>`;
     return;
   }
-  // ranked by the player's higher rating (bat or bowl), same as Squad Ledger's leaderboard sort
+  const sorters = {
+    top: (a, b) => Math.max(b.batting, b.bowling) - Math.max(a.batting, a.bowling),
+    bat: (a, b) => b.batting - a.batting,
+    bowl: (a, b) => b.bowling - a.bowling,
+    keeping: (a, b) => (b.keeping || 0) - (a.keeping || 0),
+    name: (a, b) => a.name.localeCompare(b.name),
+  };
   const ranked = [...filtered].sort((a, b) => {
-    const topA = Math.max(a.batting, a.bowling), topB = Math.max(b.batting, b.bowling);
-    if (topB !== topA) return topB - topA;
+    const primary = (sorters[sortBy] || sorters.top)(a, b);
+    if (primary !== 0) return primary;
     return a.name.localeCompare(b.name);
   });
 
@@ -1971,11 +2012,13 @@ function renderPlayerDbList() {
       : skillChipHtml(p.bowling, p.bowlingSkill === "Specialist Bowler", BOWLING_SKILL_SHORT[p.bowlingSkill]);
     const hand = HAND_SHORT[p.battingHand] || p.battingHand;
     const style = p.bowlingStyle === "Does Not Bowl" ? "—" : p.bowlingStyle;
+    const keeperCell = p.isWicketKeeper ? `<span class="chip">${p.keeping || 0}</span>` : `<span class="chip" style="opacity:0.3;">&mdash;</span>`;
     return `<tr class="leaderboard-row" data-player-id="${p.id}">
       <td class="rank-col">${idx + 1}</td>
       <td class="name-col">${p.name}${p.isWicketKeeper ? ` <span class="hint-text" style="font-size:10px;">WK</span>` : ""}</td>
       <td>${batChip}</td>
       <td>${bowlChip}</td>
+      <td>${keeperCell}</td>
       <td class="meta-col">${hand}</td>
       <td class="meta-col">${style}</td>
     </tr>`;
@@ -1984,7 +2027,7 @@ function renderPlayerDbList() {
   list.innerHTML = `
     <div class="players-table-wrap">
       <table class="players-table">
-        <thead><tr><th>#</th><th>Player</th><th>Bat</th><th>Bowl</th><th>Hand</th><th>Style</th></tr></thead>
+        <thead><tr><th>#</th><th>Player</th><th>Bat</th><th>Bowl</th><th>WK</th><th>Hand</th><th>Style</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -1995,8 +2038,10 @@ function renderPlayerDbList() {
 
 document.getElementById("addPlayerBtn").addEventListener("click", () => openPlayerModal(null));
 document.getElementById("playerSearchInput").addEventListener("input", () => renderPlayerDbList());
-["playerFilterRole", "playerFilterSkill", "playerFilterBowlType", "playerFilterRating"].forEach(id => {
-  document.getElementById(id).addEventListener("change", () => renderPlayerDbList());
+["playerFilterRole", "playerFilterSkill", "playerFilterBowlType", "playerFilterMinRating", "playerFilterMaxRating", "playerSortBy"].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener("change", () => renderPlayerDbList());
+  if (el.tagName === "INPUT") el.addEventListener("input", () => renderPlayerDbList());
 });
 
 // ============================================================
@@ -2511,6 +2556,7 @@ function playSeasonMatchLive(match, seasonPitch, totalOvers, onDone) {
     teamA: teamPlayers(teamA), teamB: teamPlayers(teamB), pitch, totalOvers,
     teamAName: teamA.name, teamBName: teamB.name,
   });
+  resolveTieWithSuperOver(result, teamPlayers(teamA), teamPlayers(teamB), pitch);
   const colors = { firstTeamColor: result.firstTeamName === teamA.name ? teamA.color : teamB.color, secondTeamColor: result.firstTeamName === teamA.name ? teamB.color : teamA.color };
 
   const overlay = document.getElementById("seasonLiveOverlay");
@@ -2534,7 +2580,13 @@ function playSeasonMatchLive(match, seasonPitch, totalOvers, onDone) {
       const secondScore = { runs: result.second.runs, wkts: result.second.wickets, overs: formatOvers(result.second.oversUsed), allOut: result.second.wickets >= 10 };
       if (firstIsTeamA) { match.score1 = firstScore; match.score2 = secondScore; }
       else { match.score2 = firstScore; match.score1 = secondScore; }
-      if (result.margin === "Match tied") match.tieWinnerId = null;
+      // main-match scores are still equal here (that's genuinely what
+      // happened) — tieWinnerId records the Super Over's resolution, so
+      // getWinnerId() reports it as a decisive result everywhere
+      if (Number(firstScore.runs) === Number(secondScore.runs)) {
+        const winnerName = getMatchResultWinner(result);
+        match.tieWinnerId = winnerName ? (winnerName === teamA.name ? teamA.id : teamB.id) : null;
+      }
       match.mom = result.motm ? `${result.motm.name} (${result.motm.teamName})` : "";
       match.fullResult = result;
       recordMatch({
@@ -2555,13 +2607,17 @@ function simulateSeasonMatch(match, seasonPitch, totalOvers) {
     teamA: teamPlayers(teamA), teamB: teamPlayers(teamB), pitch, totalOvers,
     teamAName: teamA.name, teamBName: teamB.name,
   });
+  resolveTieWithSuperOver(result, teamPlayers(teamA), teamPlayers(teamB), pitch);
   const firstIsTeamA = result.firstTeamName === teamA.name;
   match.battingFirstId = firstIsTeamA ? match.team1Id : match.team2Id;
   const firstScore = { runs: result.first.runs, wkts: result.first.wickets, overs: formatOvers(result.first.oversUsed), allOut: result.first.wickets >= 10 };
   const secondScore = { runs: result.second.runs, wkts: result.second.wickets, overs: formatOvers(result.second.oversUsed), allOut: result.second.wickets >= 10 };
   if (firstIsTeamA) { match.score1 = firstScore; match.score2 = secondScore; }
   else { match.score2 = firstScore; match.score1 = secondScore; }
-  if (result.margin === "Match tied") match.tieWinnerId = null;
+  if (Number(firstScore.runs) === Number(secondScore.runs)) {
+    const winnerName = getMatchResultWinner(result);
+    match.tieWinnerId = winnerName ? (winnerName === teamA.name ? teamA.id : teamB.id) : null;
+  }
   match.mom = result.motm ? `${result.motm.name} (${result.motm.teamName})` : "";
   match.fullResult = result;
   recordMatch({
@@ -2667,6 +2723,20 @@ function renderStatsTables(stats) {
   return `<div class="card-tables">${battingHtml}${bowlingHtml}</div>${keepingHtml}`;
 }
 
+/** The winning team's name for a completed match, resolving Super Overs
+ * correctly and falling back to run-comparison for matches saved before
+ * winnerTeamName existed on the result shape. Returns null only for a
+ * genuine, still-unresolved tie (Super Over also tied, 5 attempts in).
+ * Checks the tie/Super-Over case FIRST, ahead of any winnerTeamName
+ * shortcut, since a tied match's winner can only ever come from the
+ * Super Over — trusting a winnerTeamName that predates the tie being
+ * forced would report the wrong side. */
+function getMatchResultWinner(result) {
+  if (result.margin === "Match tied") return result.superOver?.winnerTeamName || null;
+  if (result.winnerTeamName !== undefined) return result.winnerTeamName;
+  return result.second.runs > result.first.runs ? result.secondTeamName : result.firstTeamName;
+}
+
 function renderStatsTab() {
   persistState();
   document.getElementById("allTimeStats").innerHTML = renderStatsTables(computeAggregateStats(appState.matches));
@@ -2680,15 +2750,17 @@ function renderStatsTab() {
   historyEl.innerHTML = sorted.map(m => {
     const mom = m.result.motm ? `${m.result.motm.name} (${m.result.motm.teamName})` : "";
     const sourceLabel = m.source === "season" ? "Season" : "Friendly";
-    const winnerName = m.result.margin === "Match tied" ? null
-      : (m.result.second.runs > m.result.first.runs ? m.result.secondTeamName : m.result.firstTeamName);
+    const winnerName = getMatchResultWinner(m.result);
     let resultText;
-    if (winnerName) resultText = `${winnerName} ${m.result.margin}`;
-    else if (m.result.superOver?.winnerTeamName) {
-      const attempt = m.result.superOver.attempt || 1;
-      const soLabel = attempt > 1 ? `${ordinal(attempt)} Super Over` : "Super Over";
-      resultText = `Match Tied : ${m.result.superOver.winnerTeamName} won the ${soLabel}`;
-    } else resultText = "Match Tied";
+    if (m.result.margin === "Match tied") {
+      if (winnerName) {
+        const attempt = m.result.superOver?.attempt || 1;
+        const soLabel = attempt > 1 ? `${ordinal(attempt)} Super Over` : "Super Over";
+        resultText = `Match Tied : ${winnerName} won the ${soLabel}`;
+      } else resultText = "Match Tied";
+    } else {
+      resultText = `${winnerName} ${m.result.margin}`;
+    }
     return `
     <div class="match-history-card" data-match-id="${m.id}">
       <div class="match-history-score-row"><b>${m.result.firstTeamName}</b><span class="match-history-score-value">${m.result.first.scoreText}</span></div>
@@ -2822,8 +2894,9 @@ function computeAllTimeTable(matches) {
     const o2 = r.second.wickets >= 10 ? totalOvers : r.second.oversUsed;
     s1.runsFor += r.first.runs; s1.oversFor += o1; s1.runsAgainst += r.second.runs; s1.oversAgainst += o2;
     s2.runsFor += r.second.runs; s2.oversFor += o2; s2.runsAgainst += r.first.runs; s2.oversAgainst += o1;
-    if (r.margin === "Match tied") { s1.tied++; s2.tied++; s1.points++; s2.points++; }
-    else if (r.second.runs > r.first.runs) { s2.won++; s1.lost++; s2.points += 2; }
+    const winner = getMatchResultWinner(r);
+    if (!winner) { s1.tied++; s2.tied++; s1.points++; s2.points++; }
+    else if (winner === r.secondTeamName) { s2.won++; s1.lost++; s2.points += 2; }
     else { s1.won++; s2.lost++; s1.points += 2; }
   });
   return Object.values(stats)
@@ -3119,10 +3192,9 @@ function renderSeasonsAppDetail() {
       if (rec.teamAName !== selectedTeamName && rec.teamBName !== selectedTeamName) return;
       teamRecord.played++;
       const r = rec.result;
-      const oppRuns = r.firstTeamName === selectedTeamName ? r.second.runs : r.first.runs;
-      const ownRuns = r.firstTeamName === selectedTeamName ? r.first.runs : r.second.runs;
-      if (r.margin === "Match tied") teamRecord.tied++;
-      else if (ownRuns > oppRuns) teamRecord.won++;
+      const winner = getMatchResultWinner(r);
+      if (!winner) teamRecord.tied++;
+      else if (winner === selectedTeamName) teamRecord.won++;
       else teamRecord.lost++;
     });
     const teamTopRuns = topRuns.length ? [...seasonStats.batting].filter(b => b.team === selectedTeamName).sort((a, b) => b.runs - a.runs).slice(0, 10) : [];
@@ -3145,8 +3217,8 @@ function renderSeasonsAppDetail() {
         const ownScore = { runs: own.runs, wkts: own.wickets, overs: own.oversUsed };
         const oppScore = { runs: opp.runs, wkts: opp.wickets, overs: opp.oversUsed };
         const opponent = isFirst ? r.secondTeamName : r.firstTeamName;
-        const won = r.margin !== "Match tied" && ownScore.runs > oppScore.runs
-          ? true : (r.margin !== "Match tied" && ownScore.runs < oppScore.runs ? false : null);
+        const winner = getMatchResultWinner(r);
+        const won = winner ? winner === selectedTeamName : null;
         return { opponent, ownScore, oppScore, won, margin: r.margin };
       });
     const teamWiseHtml = teamIds.length === 0 ? "" : `
@@ -3319,7 +3391,6 @@ function renderSeasonsAppDetail() {
     wireGroupCards(season, pitch, totalOvers);
     wireKnockoutCards(season, pitch, totalOvers);
     wireScorecardButtons();
-    wireSeasonSuperOverButtons(season, pitch, totalOvers);
   } else {
     const teamSelect = document.getElementById("seasonStatsTeamSelect");
     if (teamSelect) teamSelect.onchange = () => { seasonsStatsTeamId = Number(teamSelect.value); renderSeasonsAppDetail(); };
@@ -3344,31 +3415,6 @@ document.getElementById("closeSeasonScorecardBtn").addEventListener("click", () 
   document.getElementById("seasonScorecardOverlay").style.display = "none";
 });
 
-/** Plays a Super Over directly from a tied season match's card — the
- * winner is written back onto the match (tieWinnerId) so standings,
- * knockout progression, and the season champion all correctly pick it
- * up, exactly as if the tie had never happened for advancement
- * purposes, while the tie itself still shows in the result line. */
-function wireSeasonSuperOverButtons(season, pitch, totalOvers) {
-  document.querySelectorAll(".play-so-btn").forEach(btn => {
-    btn.onclick = () => {
-      const allMatches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)];
-      const match = allMatches.find(m => m.id === Number(btn.dataset.matchId));
-      if (!match || !match.fullResult) return;
-      const teamA = getTeam(match.team1Id), teamB = getTeam(match.team2Id);
-      const matchPitch = pitchForMatch(match, pitch);
-      const superOver = simulateSuperOver({ matchResult: match.fullResult, teamA: teamPlayers(teamA), teamB: teamPlayers(teamB), pitch: matchPitch });
-      match.fullResult.superOver = superOver;
-      if (superOver.winnerTeamName) {
-        match.tieWinnerId = superOver.winnerTeamName === teamA.name ? teamA.id : teamB.id;
-      }
-      const historyMatch = appState.matches.find(hm => hm.seasonMatchId === match.id);
-      if (historyMatch) { historyMatch.result.superOver = superOver; idbPutMatch(historyMatch); }
-      persistState();
-      renderSeasonsAppDetail();
-    };
-  });
-}
 
 
 
@@ -3399,7 +3445,6 @@ function renderGroupCard(season, group, pitch, totalOvers) {
         <div class="ps-match-result-row">${formatMatchResultLine(m)}</div>
         ${m.mom ? `<div class="ps-match-mom-row">Player of the Match: ${m.mom}</div>` : ""}
         <div class="ps-match-actions-row">
-          ${(m.fullResult?.margin === "Match tied" && !m.tieWinnerId) ? `<button class="ps-ghost-btn play-so-btn" data-match-id="${m.id}">⚡ Play Super Over</button>` : ""}
           <button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>
           <button class="ps-remove-btn remove-group-match-btn" data-group-id="${group.id}" data-match-id="${m.id}">Remove</button>
         </div>
@@ -3447,7 +3492,6 @@ function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
         <div class="ps-match-result-row">${formatMatchResultLine(m)}</div>
         ${m.mom ? `<div class="ps-match-mom-row">Player of the Match: ${m.mom}</div>` : ""}
         <div class="ps-match-actions-row">
-          ${(m.fullResult?.margin === "Match tied" && !m.tieWinnerId) ? `<button class="ps-ghost-btn play-so-btn" data-match-id="${m.id}">⚡ Play Super Over</button>` : ""}
           <button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>
           <button class="ps-remove-btn remove-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Remove</button>
         </div>
@@ -3636,6 +3680,7 @@ document.getElementById("simulateBtn").addEventListener("click", () => {
     teamA: teamPlayers(teamAObj), teamB: teamPlayers(teamBObj), pitch, totalOvers,
     teamAName: teamAObj.name, teamBName: teamBObj.name,
   });
+  resolveTieWithSuperOver(result, teamPlayers(teamAObj), teamPlayers(teamBObj), pitch);
 
   const resultsEl = document.getElementById("results");
   resultsEl.style.display = "block";
@@ -3791,18 +3836,23 @@ function renderCompleteScorecard(result, colors, finalEl, matchContext) {
   const motmHtml = result.motm
     ? `<div class="motm-line">Man of the Match: <b>${result.motm.name}</b> (${result.motm.teamName})</div>`
     : "";
-  const superOverBtnHtml = (result.margin === "Match tied" && matchContext && !result.superOver)
-    ? `<button type="button" class="btn-primary play-super-over-btn" style="margin-top:8px;">⚡ Play Super Over</button>` : "";
   const superOverHtml = result.superOver ? renderSuperOverSummary(result.superOver) : "";
+  let mainResultText = result.margin;
+  if (result.margin === "Match tied" && result.superOver?.winnerTeamName) {
+    const attempt = result.superOver.attempt || 1;
+    const soLabel = attempt > 1 ? `${ordinal(attempt)} Super Over` : "Super Over";
+    mainResultText = `Match Tied : ${result.superOver.winnerTeamName} won the ${soLabel}`;
+  } else if (result.margin === "Match tied") {
+    mainResultText = "Match Tied";
+  }
   const scoreboardHtml = `
     <div class="scoreboard">
       <div class="side"><div class="team-label">${result.firstTeamName}</div><div class="score">${result.first.scoreText}</div></div>
       <div class="side"><div class="team-label">${result.secondTeamName}</div><div class="score">${result.second.scoreText}</div></div>
     </div>
-    <div class="result-line">${result.margin}</div>
+    <div class="result-line">${mainResultText}</div>
     ${motmHtml}
-    ${superOverHtml}
-    ${superOverBtnHtml}`;
+    ${superOverHtml}`;
 
   const firstCard = buildTeamCard(
     result.firstTeamName, result.secondTeamName,
@@ -3843,15 +3893,6 @@ function renderCompleteScorecard(result, colors, finalEl, matchContext) {
   finalEl2.querySelector("#downloadScorecardBtn, .download-scorecard-btn").addEventListener("click", () => {
     downloadScorecardImage(finalEl2, `${result.firstTeamName}-vs-${result.secondTeamName}-scorecard`);
   });
-
-  const superOverBtn = finalEl2.querySelector(".play-super-over-btn");
-  if (superOverBtn) {
-    superOverBtn.addEventListener("click", () => {
-      result.superOver = simulateSuperOver({ matchResult: result, teamA: matchContext.teamA, teamB: matchContext.teamB, pitch: matchContext.pitch });
-      if (matchContext.onSuperOverPlayed) matchContext.onSuperOverPlayed(result.superOver);
-      renderCompleteScorecard(result, colors, finalEl, matchContext);
-    });
-  }
 }
 
 /** A tied match's Super Over result, shown as its own compact scoreboard
@@ -3859,6 +3900,10 @@ function renderCompleteScorecard(result, colors, finalEl, matchContext) {
 function renderSuperOverSummary(so) {
   const winnerLine = so.winnerTeamName ? `<b>${so.winnerTeamName}</b> ${so.margin}` : so.margin;
   const attemptNote = so.attempt > 1 ? ` <span class="hint-text">(Super Over ${so.attempt})</span>` : "";
+  const firstBattingHtml = renderBattingTable(so.first.battingLog);
+  const firstBowlingHtml = renderBowlingTable(so.second.bowlingLog, so.first.timeline);
+  const secondBattingHtml = renderBattingTable(so.second.battingLog);
+  const secondBowlingHtml = renderBowlingTable(so.first.bowlingLog, so.second.timeline);
   return `
     <div class="super-over-summary">
       <div class="super-over-heading">Super Over${attemptNote}</div>
@@ -3867,6 +3912,18 @@ function renderSuperOverSummary(so) {
         <div class="side"><div class="team-label">${so.secondTeamName}</div><div class="score">${so.second.scoreText}</div></div>
       </div>
       <div class="result-line">${winnerLine}</div>
+      <div class="super-over-innings">
+        <p class="super-over-innings-label">${so.firstTeamName} batting</p>
+        ${firstBattingHtml}
+        <p class="super-over-innings-label">${so.secondTeamName} bowling</p>
+        ${firstBowlingHtml}
+      </div>
+      <div class="super-over-innings">
+        <p class="super-over-innings-label">${so.secondTeamName} batting</p>
+        ${secondBattingHtml}
+        <p class="super-over-innings-label">${so.firstTeamName} bowling</p>
+        ${secondBowlingHtml}
+      </div>
     </div>`;
 }
 
