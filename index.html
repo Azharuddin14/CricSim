@@ -1034,32 +1034,49 @@ function getEligibleBowlers(bowlingTeam, totalOvers) {
 }
 
 /** Pure weighted pick from a candidate pool — rating plus phase/style fit. */
-function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns) {
+function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns, runsLeaking, holdback) {
   const earlyPhase = over < Math.round(totalOvers * 0.4);
   const deathPhase = over >= totalOvers - 4;
   const middlePhase = !earlyPhase && !deathPhase;
   const isFastStyle = b => b.bowlingStyle === "Right Arm Fast" || b.bowlingStyle === "Left Arm Fast";
   const weights = candidates.map(b => {
-    let w = Math.max(1, b.bowling) ** 2;
+    // squaring the rating (pushed to 2.5) sharpens the gap between
+    // genuine frontline bowlers and part-timers, so a captain's best
+    // options dominate selection instead of every non-capped bowler
+    // getting a roughly similar share
+    let w = Math.max(1, b.bowling) ** 2.5;
     const isSp = SPIN_STYLES.includes(b.bowlingStyle);
     const isPace = !isSp && b.bowlingStyle !== "None" && b.bowlingStyle !== "Does Not Bowl";
+    const isSpecialist = b.bowlingSkill === "Specialist Bowler";
+
+    // A genuine strike bowler is a captain's first thought regardless of
+    // phase — this stacks with the phase-specific boosts below rather
+    // than replacing them, so a specialist dominates selection in their
+    // preferred overs (powerplay/death) and remains a serious option in
+    // the middle too, instead of being actively penalised there.
+    if (isSpecialist) w *= 1.8;
 
     if (earlyPhase) {
       if (isPace) w *= 1.7;
       if (isFastStyle(b)) w *= 1.6;
-      if (b.bowlingSkill === "Specialist Bowler" && isPace) w *= 1.8;
+      if (isSpecialist && isPace) w *= 1.5;
       if (b.bowlingSkill === "New Ball Bowler") w *= 1.7;
       if (isSp) w *= 0.6;
       if (b.bowlingSkill === "Mystery Spinner") w *= 0.4;
       if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 0.15;
     } else if (middlePhase) {
+      // the generic pace penalty is waived for a specialist — still a
+      // real option here, just not the default pick — and if runs are
+      // actually leaking, a captain brings their strike bowler straight
+      // back to stem the flow, even mid-innings
       if (isSp) w *= 1.6;
-      if (isPace) w *= 0.7;
+      if (isPace && !isSpecialist) w *= 0.7;
       if (b.bowlingSkill === "Mystery Spinner") w *= 2.2;
       if (b.bowlingSkill === "Death/Old Ball Bowler" && over >= 11) w *= 1.15;
+      if (runsLeaking && isSpecialist) w *= 2.0;
     } else if (deathPhase) {
       if (isPace) w *= 1.6;
-      if (b.bowlingSkill === "Specialist Bowler" && isPace) w *= 2.6;
+      if (isSpecialist && isPace) w *= 1.6;
       if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 1.9;
       if (b.bowlingSkill === "New Ball Bowler") w *= 1.4;
       if (isSp) w *= 0.25;
@@ -1075,6 +1092,16 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns) {
       if (runs >= 14) w *= 0.35;
       else if (runs >= 10) w *= 0.6;
     }
+
+    // holding back the reserved death bowler ahead of the death phase is
+    // a lean-away, not a lockout — they're still callable if runs are
+    // leaking or they're simply the best option on the day, but the
+    // discount needs real teeth: a truly elite bowler's base weight is
+    // so dominant that a mild penalty barely slows them down, and they'd
+    // burn through all 4 overs in the powerplay alone, leaving nothing
+    // held back for the death overs they were specifically reserved for
+    if (holdback === b && !runsLeaking) w *= 0.12;
+
     return w;
   });
   const totalWeight = weights.reduce((a, b) => a + b, 0);
@@ -1093,7 +1120,7 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns) {
  * options happen to be an off-phase type. "Never repeat the previous
  * over's bowler" is the one genuinely hard rule, relaxed only if the team
  * has truly no one else; the overs cap is relaxed before that ever is. */
-function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler }) {
+function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler, runsLeaking }) {
   const generalMax = Math.max(1, Math.ceil(totalOvers / 5));
   const capFor = b => {
     const isGenuinePartTimer = b.bowlingSkill === "None" && b.bowling < 60;
@@ -1117,14 +1144,18 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
     return true;
   }
 
-  let pool = eligible;
-  if (reservedDeathBowler && !deathPhase && !capped(reservedDeathBowler)) {
-    const oversLeft = generalMax - (oversBowledMap.get(reservedDeathBowler) || 0);
-    if (oversLeft <= 2) {
-      const withoutReserved = pool.filter(b => b !== reservedDeathBowler);
-      if (withoutReserved.length > 0) pool = withoutReserved;
-    }
-  }
+  // A team's best death specialist is soft-discouraged (not locked out)
+  // from bowling once they're down to their last couple of overs, ahead
+  // of the death phase — a real captain leans away from using them up
+  // early, but will still absolutely call on them if runs are leaking or
+  // no one else is a better option. This used to be a hard pool
+  // exclusion, which meant a bowler reaching "2 overs left" at, say,
+  // over 4 was then locked out of the entire rest of the middle overs
+  // (over a dozen overs, in a 20-over innings) — exactly the kind of
+  // unrealistic under-bowling a genuinely elite bowler shouldn't suffer.
+  const pool = eligible;
+  const reservedDeathBowlerHoldback = (reservedDeathBowler && !deathPhase && !capped(reservedDeathBowler)
+    && (generalMax - (oversBowledMap.get(reservedDeathBowler) || 0)) <= 2) ? reservedDeathBowler : null;
 
   let candidates = pool.filter(b => !capped(b) && b !== lastOverBowler);
   const feasibleCandidates = candidates.filter(feasibleAfterPicking);
@@ -1149,9 +1180,9 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
   if (mustRelaxCap && candidates.length > 1) {
     const minOvers = Math.min(...candidates.map(b => oversBowledMap.get(b) || 0));
     const leastUsed = candidates.filter(b => (oversBowledMap.get(b) || 0) === minOvers);
-    bowler = pickWeightedBowler(leastUsed, over, totalOvers, lastOverRuns);
+    bowler = pickWeightedBowler(leastUsed, over, totalOvers, lastOverRuns, runsLeaking, reservedDeathBowlerHoldback);
   } else {
-    bowler = pickWeightedBowler(candidates, over, totalOvers, lastOverRuns);
+    bowler = pickWeightedBowler(candidates, over, totalOvers, lastOverRuns, runsLeaking, reservedDeathBowlerHoldback);
   }
   if (powerplayUsed) powerplayUsed.add(bowler);
   return { bowler };
@@ -1185,7 +1216,11 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target, 
   const BYE_CHANCE = 0.02;
 
   for (let over = 0; over < totalOvers && wickets < maxWickets && strikerIdx < battingTeam.length && (target == null || runs < target); over++) {
-    const choice = fixedBowler ? { bowler: fixedBowler } : chooseBowlerForOver({ eligible, fullTeam: bowlingTeam, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler });
+    // "runs leaking" means the batting side is scoring well above a
+    // normal rate for this stage of the innings — a real captain would
+    // recognise this and bring a strike bowler back even mid-innings
+    const runsLeaking = over >= 3 && (runs / over) >= 9;
+    const choice = fixedBowler ? { bowler: fixedBowler } : chooseBowlerForOver({ eligible, fullTeam: bowlingTeam, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler, runsLeaking });
     const bowler = choice.bowler;
     const bowlerLog = bowlingLog[bowlingTeam.indexOf(bowler)];
     if (!bowlerBallsSelf.has(bowler)) bowlerBallsSelf.set(bowler, 0);
