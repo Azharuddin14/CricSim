@@ -490,7 +490,7 @@ function getEligibleBowlers(bowlingTeam, totalOvers) {
  * battingTeam / bowlingTeam: arrays of players in batting/bowling order.
  * target: if chasing, the number of runs needed to win (null if batting first).
  */
-function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }) {
+function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target, maxWickets = 10, fixedBowler = null }) {
   let runs = 0, wickets = 0;
   let strikerIdx = 0, nonStrikerIdx = 1;
   const battingLog = battingTeam.map(p => ({ name: p.name, runs: 0, balls: 0, fours: 0, sixes: 0, out: false, dismissal: null }));
@@ -523,8 +523,8 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
   const NOBALL_CHANCE = 0.011;
   const BYE_CHANCE = 0.02; // only rolled when the underlying delivery would otherwise be a dot
 
-  for (let over = 0; over < totalOvers && wickets < 10 && strikerIdx < battingTeam.length && (target == null || runs < target); over++) {
-    const choice = chooseBowlerForOver({ eligible, fullTeam: bowlingTeam, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler });
+  for (let over = 0; over < totalOvers && wickets < maxWickets && strikerIdx < battingTeam.length && (target == null || runs < target); over++) {
+    const choice = fixedBowler ? { bowler: fixedBowler } : chooseBowlerForOver({ eligible, fullTeam: bowlingTeam, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler });
     const bowler = choice.bowler;
     const bowlerLog = bowlingLog[bowlingTeam.indexOf(bowler)];
     if (!bowlerBallsSelf.has(bowler)) bowlerBallsSelf.set(bowler, 0);
@@ -532,7 +532,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
     let legalBalls = 0;
     let freeHit = false;
 
-    while (legalBalls < 6 && wickets < 10 && strikerIdx < battingTeam.length && (target == null || runs < target)) {
+    while (legalBalls < 6 && wickets < maxWickets && strikerIdx < battingTeam.length && (target == null || runs < target)) {
       const batter = battingTeam[strikerIdx];
       const batterLog = battingLog[strikerIdx];
       const oversLeft = totalOvers - over - legalBalls / 6;
@@ -796,6 +796,67 @@ function simulateMatch({ teamA, teamB, pitch, totalOvers = 20 }) {
   };
 }
 
+/** ICC Super Over rules: each side picks 3 batters and its best bowler
+ * from their showing in the just-finished match (not by season-long
+ * reputation — pure form on the day), the side that batted second in
+ * the main match bats first, and an innings ends at 6 legal balls or
+ * 2 wickets, whichever comes first. If the Super Over itself ties,
+ * another is played (real rule) — capped at 5 attempts since a repeat
+ * tie is exceedingly rare. */
+function ordinal(n) {
+  if (n % 100 >= 11 && n % 100 <= 13) return `${n}th`;
+  return `${n}${["th", "st", "nd", "rd"][n % 10] || "th"}`;
+}
+function pickSuperOverBatters(team, battingLog) {
+  const ranked = [...battingLog].sort((a, b) => b.runs - a.runs).slice(0, 3);
+  return ranked.map(entry => team.find(p => p.name === entry.name)).filter(Boolean);
+}
+function pickSuperOverBowler(team, bowlingLog) {
+  const ranked = [...bowlingLog].sort((a, b) => b.wickets - a.wickets || a.runs - b.runs)[0];
+  return ranked ? team.find(p => p.name === ranked.name) : team[0];
+}
+function simulateSuperOver({ matchResult, teamA, teamB, pitch, attempt = 1 }) {
+  const teamABattedFirst = matchResult.battingFirstTeam === "teamA";
+  // team batting second in the main match bats first in the Super Over
+  const soFirstTeam = teamABattedFirst ? teamB : teamA;
+  const soSecondTeam = teamABattedFirst ? teamA : teamB;
+  const soFirstLabel = teamABattedFirst ? "teamB" : "teamA";
+  const soSecondLabel = teamABattedFirst ? "teamA" : "teamB";
+  const soFirstMainResult = teamABattedFirst ? matchResult.second : matchResult.first;
+  const soSecondMainResult = teamABattedFirst ? matchResult.first : matchResult.second;
+
+  const firstBatters = pickSuperOverBatters(soFirstTeam, soFirstMainResult.battingLog);
+  const secondBatters = pickSuperOverBatters(soSecondTeam, soSecondMainResult.battingLog);
+  const firstBowler = pickSuperOverBowler(soSecondTeam, soSecondMainResult.bowlingLog);
+  const secondBowler = pickSuperOverBowler(soFirstTeam, soFirstMainResult.bowlingLog);
+
+  const first = simulateInnings({ battingTeam: firstBatters, bowlingTeam: soSecondTeam, pitch, totalOvers: 1, maxWickets: 2, target: null, fixedBowler: firstBowler });
+  const target = first.runs + 1;
+  const second = simulateInnings({ battingTeam: secondBatters, bowlingTeam: soFirstTeam, pitch, totalOvers: 1, maxWickets: 2, target, fixedBowler: secondBowler });
+
+  let winnerLabel, margin;
+  const soLabel = attempt > 1 ? `${ordinal(attempt)} Super Over` : "Super Over";
+  if (second.runs >= target) {
+    winnerLabel = soSecondLabel;
+    const wicketsInHand = 2 - second.wickets;
+    margin = `won the ${soLabel} by ${wicketsInHand} wicket${wicketsInHand === 1 ? "" : "s"}`;
+  } else if (second.runs === first.runs) {
+    if (attempt < 5) return simulateSuperOver({ matchResult, teamA, teamB, pitch, attempt: attempt + 1 });
+    winnerLabel = null;
+    margin = "Super Over also tied";
+  } else {
+    winnerLabel = soFirstLabel;
+    margin = `won the ${soLabel} by ${first.runs - second.runs} run${first.runs - second.runs === 1 ? "" : "s"}`;
+  }
+
+  return {
+    attempt, winner: winnerLabel, margin,
+    firstTeamLabel: soFirstLabel, secondTeamLabel: soSecondLabel,
+    first: { ...first, scoreText: `${first.runs}/${first.wickets} (${formatOvers(first.oversUsed)})` },
+    second: { ...second, scoreText: `${second.runs}/${second.wickets} (${formatOvers(second.oversUsed)})` },
+  };
+}
+
 // ---------- demo, only runs when executed directly with `node cricket-sim.js` ----------
 if (require.main === module) {
   const pitch = { speed: 7, grip: 4, bounce: 6, variation: 5, deterioration: 6 };
@@ -860,6 +921,6 @@ if (require.main === module) {
 }
 
 module.exports = {
-  getBallProbabilities, simulateInnings, simulateMatch, pickDismissal, getEligibleBowlers, decideToss, formatBallCommentary,
+  getBallProbabilities, simulateInnings, simulateMatch, simulateSuperOver, pickDismissal, getEligibleBowlers, decideToss, formatBallCommentary,
   BATTING_SKILLS, BOWLING_SKILLS, BATTING_HANDS, BOWLING_STYLES, DISMISSAL_MODES, formatDismissal, formatOvers,
 };

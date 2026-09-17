@@ -293,6 +293,16 @@
   .ps-dim { color: rgba(22,33,62,0.5); font-size: 11px; }
   .ps-mono { font-family: 'JetBrains Mono', monospace; color: #16213E; }
   .ps-empty { color: rgba(22,33,62,0.4); font-size: 12.5px; font-style: italic; padding: 8px 2px; }
+  .ps-record-line { font-family: 'Inter', sans-serif; font-size: 12px; color: #16213E; padding: 5px 2px; border-bottom: 1px solid rgba(27,67,50,0.06); }
+  .ps-record-line:last-child { border-bottom: none; }
+  .team-history-line { display: flex; align-items: baseline; gap: 6px; }
+  .team-history-result {
+    display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+    border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 10.5px; flex-shrink: 0; color: #fff;
+  }
+  .team-history-result.win { background: #2D6A4F; }
+  .team-history-result.loss { background: #C1443C; }
+  .team-history-result.tie { background: #8A8A6A; }
   .ps-card-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .ps-match-line {
     background: rgba(27,67,50,0.05); border-radius: 6px; padding: 8px 10px; margin-bottom: 6px;
@@ -509,6 +519,13 @@
     padding: 10px;
     border-radius: 0 0 6px 6px;
     margin-bottom: 24px;
+  }
+  .super-over-summary {
+    margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line);
+  }
+  .super-over-heading {
+    text-align: center; font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--amber); font-size: 12px; margin-bottom: 4px;
   }
   .motm-line {
     text-align: center;
@@ -747,7 +764,10 @@
 
   <div id="recordsTab" class="tab-panel">
     <div class="panel">
-      <h2>All-Time Table</h2>
+      <div class="panel-header-row">
+        <h2>All-Time Table</h2>
+        <select id="recordsSourceFilter"><option value="all">All matches</option><option value="season">Season matches only</option><option value="quickmatch">Friendlies only</option></select>
+      </div>
       <div id="recordsAllTimeTable"></div>
     </div>
     <div class="panel">
@@ -1122,7 +1142,7 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
   return { bowler };
 }
 
-function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }) {
+function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target, maxWickets = 10, fixedBowler = null }) {
   let runs = 0, wickets = 0;
   let strikerIdx = 0, nonStrikerIdx = 1;
   const battingLog = battingTeam.map(p => ({ name: p.name, runs: 0, balls: 0, fours: 0, sixes: 0, out: false, dismissal: null }));
@@ -1149,8 +1169,8 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
   const NOBALL_CHANCE = 0.011;
   const BYE_CHANCE = 0.02;
 
-  for (let over = 0; over < totalOvers && wickets < 10 && strikerIdx < battingTeam.length && (target == null || runs < target); over++) {
-    const choice = chooseBowlerForOver({ eligible, fullTeam: bowlingTeam, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler });
+  for (let over = 0; over < totalOvers && wickets < maxWickets && strikerIdx < battingTeam.length && (target == null || runs < target); over++) {
+    const choice = fixedBowler ? { bowler: fixedBowler } : chooseBowlerForOver({ eligible, fullTeam: bowlingTeam, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler });
     const bowler = choice.bowler;
     const bowlerLog = bowlingLog[bowlingTeam.indexOf(bowler)];
     if (!bowlerBallsSelf.has(bowler)) bowlerBallsSelf.set(bowler, 0);
@@ -1158,7 +1178,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target }
     let legalBalls = 0;
     let freeHit = false;
 
-    while (legalBalls < 6 && wickets < 10 && strikerIdx < battingTeam.length && (target == null || runs < target)) {
+    while (legalBalls < 6 && wickets < maxWickets && strikerIdx < battingTeam.length && (target == null || runs < target)) {
       const batter = battingTeam[strikerIdx];
       const batterLog = battingLog[strikerIdx];
       const oversLeft = totalOvers - over - legalBalls / 6;
@@ -1352,6 +1372,62 @@ function simulateMatch({ teamA, teamB, pitch, totalOvers, teamAName, teamBName }
     first: { ...first, scoreText: `${first.runs}${firstAllOut ? "" : `/${first.wickets}`}${firstAllOut ? "" : ` (${formatOvers(first.oversUsed)})`}` },
     second: { ...second, scoreText: `${second.runs}${secondAllOut ? "" : `/${second.wickets}`}${secondAllOut ? "" : ` (${formatOvers(second.oversUsed)})`}` },
     margin, motm,
+  };
+}
+
+/** ICC Super Over rules: each side picks 3 batters and its best bowler
+ * from their showing in the just-finished match (form on the day, not
+ * season-long reputation), the side that batted second in the main
+ * match bats first, and an innings ends at 6 legal balls or 2 wickets,
+ * whichever comes first. If the Super Over itself ties, another is
+ * played (real rule) — capped at 5 attempts since a repeat tie is
+ * exceedingly rare. */
+function pickSuperOverBatters(team, battingLog) {
+  const ranked = [...battingLog].sort((a, b) => b.runs - a.runs).slice(0, 3);
+  return ranked.map(entry => team.find(p => p.name === entry.name)).filter(Boolean);
+}
+function pickSuperOverBowler(team, bowlingLog) {
+  const ranked = [...bowlingLog].sort((a, b) => b.wickets - a.wickets || a.runs - b.runs)[0];
+  return ranked ? team.find(p => p.name === ranked.name) : team[0];
+}
+function simulateSuperOver({ matchResult, teamA, teamB, pitch, attempt = 1 }) {
+  // team batting second in the main match bats first in the Super Over
+  const soFirstTeam = matchResult.battingFirstIsA ? teamB : teamA;
+  const soSecondTeam = matchResult.battingFirstIsA ? teamA : teamB;
+  const soFirstTeamName = matchResult.secondTeamName;
+  const soSecondTeamName = matchResult.firstTeamName;
+  const soFirstMainResult = matchResult.second;
+  const soSecondMainResult = matchResult.first;
+
+  const firstBatters = pickSuperOverBatters(soFirstTeam, soFirstMainResult.battingLog);
+  const secondBatters = pickSuperOverBatters(soSecondTeam, soSecondMainResult.battingLog);
+  const firstBowler = pickSuperOverBowler(soSecondTeam, soSecondMainResult.bowlingLog);
+  const secondBowler = pickSuperOverBowler(soFirstTeam, soFirstMainResult.bowlingLog);
+
+  const first = simulateInnings({ battingTeam: firstBatters, bowlingTeam: soSecondTeam, pitch, totalOvers: 1, maxWickets: 2, target: null, fixedBowler: firstBowler });
+  const target = first.runs + 1;
+  const second = simulateInnings({ battingTeam: secondBatters, bowlingTeam: soFirstTeam, pitch, totalOvers: 1, maxWickets: 2, target, fixedBowler: secondBowler });
+
+  let winnerTeamName, margin;
+  const soLabel = attempt > 1 ? `${ordinal(attempt)} Super Over` : "Super Over";
+  if (second.runs >= target) {
+    winnerTeamName = soSecondTeamName;
+    const wicketsInHand = 2 - second.wickets;
+    margin = `won the ${soLabel} by ${wicketsInHand} wicket${wicketsInHand === 1 ? "" : "s"}`;
+  } else if (second.runs === first.runs) {
+    if (attempt < 5) return simulateSuperOver({ matchResult, teamA, teamB, pitch, attempt: attempt + 1 });
+    winnerTeamName = null;
+    margin = "Super Over also tied";
+  } else {
+    winnerTeamName = soFirstTeamName;
+    margin = `won the ${soLabel} by ${first.runs - second.runs} run${first.runs - second.runs === 1 ? "" : "s"}`;
+  }
+
+  return {
+    attempt, winnerTeamName, margin,
+    firstTeamName: soFirstTeamName, secondTeamName: soSecondTeamName,
+    first: { ...first, scoreText: `${first.runs}/${first.wickets} (${formatOvers(first.oversUsed)})` },
+    second: { ...second, scoreText: `${second.runs}/${second.wickets} (${formatOvers(second.oversUsed)})` },
   };
 }
 
@@ -1766,6 +1842,7 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     if (btn.dataset.tab === "grounds") renderGroundsTab();
   });
 });
+document.getElementById("recordsSourceFilter").addEventListener("change", () => renderRecordsTab());
 
 // ---------- shared pitch grid builder ----------
 function buildPitchGridHtml(idSuffix) {
@@ -2345,10 +2422,21 @@ function battingOrderedScores(match) {
 }
 /** "RCB won by 8 runs" / "MI won by 8 wickets" / "Match tied" — the raw
  * margin string from the engine never includes who actually won it. */
+function ordinal(n) {
+  if (n % 100 >= 11 && n % 100 <= 13) return `${n}th`;
+  return `${n}${["th", "st", "nd", "rd"][n % 10] || "th"}`;
+}
 function formatMatchResultLine(match) {
   if (!isPlayed(match)) return "";
   const margin = match.fullResult ? match.fullResult.margin : null;
-  if (margin === "Match tied" || (!margin && !getWinnerId(match))) return "Match tied";
+  if (margin === "Match tied" || (!margin && !getWinnerId(match))) {
+    if (match.tieWinnerId) {
+      const attempt = match.fullResult?.superOver?.attempt || 1;
+      const soLabel = attempt > 1 ? `${ordinal(attempt)} Super Over` : "Super Over";
+      return `Match Tied : ${getTeam(match.tieWinnerId)?.name} won the ${soLabel}`;
+    }
+    return "Match Tied";
+  }
   const winnerId = getWinnerId(match);
   const winnerName = getTeam(winnerId)?.name || "";
   if (margin) return `${winnerName} ${margin}`;
@@ -2594,7 +2682,13 @@ function renderStatsTab() {
     const sourceLabel = m.source === "season" ? "Season" : "Friendly";
     const winnerName = m.result.margin === "Match tied" ? null
       : (m.result.second.runs > m.result.first.runs ? m.result.secondTeamName : m.result.firstTeamName);
-    const resultText = winnerName ? `${winnerName} ${m.result.margin}` : "Match tied";
+    let resultText;
+    if (winnerName) resultText = `${winnerName} ${m.result.margin}`;
+    else if (m.result.superOver?.winnerTeamName) {
+      const attempt = m.result.superOver.attempt || 1;
+      const soLabel = attempt > 1 ? `${ordinal(attempt)} Super Over` : "Super Over";
+      resultText = `Match Tied : ${m.result.superOver.winnerTeamName} won the ${soLabel}`;
+    } else resultText = "Match Tied";
     return `
     <div class="match-history-card" data-match-id="${m.id}">
       <div class="match-history-score-row"><b>${m.result.firstTeamName}</b><span class="match-history-score-value">${m.result.first.scoreText}</span></div>
@@ -2743,7 +2837,8 @@ function scoreLine(score) {
 }
 
 function renderRecordsTab() {
-  const matches = appState.matches;
+  const sourceFilter = document.getElementById("recordsSourceFilter").value;
+  const matches = sourceFilter === "all" ? appState.matches : appState.matches.filter(m => (m.source || "quickmatch") === sourceFilter);
   const empty = `<p class="hint-text">No matches recorded yet.</p>`;
 
   const table = computeAllTimeTable(matches);
@@ -2978,6 +3073,39 @@ function renderSeasonsAppDetail() {
     const topWickets = [...seasonStats.bowling].sort((a, b) => b.wickets - a.wickets || a.runs - b.runs).slice(0, 15);
     const topMom = seasonMomTally.slice(0, 15);
     const emptyStat = `<p class="ps-empty">No matches played yet this season.</p>`;
+    const scoreLineHtml = i => `${i.score.runs}/${i.score.wkts} (${formatOvers(i.score.overs)})`;
+
+    // The same record categories as the main Records tab (top scores,
+    // successful chases, lowest scores, lowest totals defended) but
+    // scoped to just this season's own matches, matching Pitchside's
+    // per-tournament records screen rather than blending everything
+    // together across every season and every friendly ever played.
+    const seasonTopScores = getTopScores(seasonRecords, 10);
+    const seasonTopChases = getTopChases(seasonRecords, 10);
+    const seasonLowScores = getLowScores(seasonRecords, 10);
+    const seasonLowestDefended = getLowestDefended(seasonRecords, 10);
+    const seasonRecordsHtml = `
+      <div class="ps-card">
+        <div class="ps-card-title">Season Records</div>
+        <div class="ps-stats-grid">
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Top Scores</div>
+            <div class="ps-scroll">${seasonTopScores.length === 0 ? emptyStat : seasonTopScores.map((i, idx) => `<div class="ps-record-line">${idx+1}. <b>${i.team}</b> ${scoreLineHtml(i)} v ${i.opponent}</div>`).join("")}</div>
+          </div>
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Top Successful Chases</div>
+            <div class="ps-scroll">${seasonTopChases.length === 0 ? emptyStat : seasonTopChases.map((i, idx) => `<div class="ps-record-line">${idx+1}. <b>${i.team}</b> chased ${scoreLineHtml(i)} v ${i.opponent}</div>`).join("")}</div>
+          </div>
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Lowest Scores</div>
+            <div class="ps-scroll">${seasonLowScores.length === 0 ? emptyStat : seasonLowScores.map((i, idx) => `<div class="ps-record-line">${idx+1}. <b>${i.team}</b> ${scoreLineHtml(i)} v ${i.opponent}</div>`).join("")}</div>
+          </div>
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Lowest Totals Defended</div>
+            <div class="ps-scroll">${seasonLowestDefended.length === 0 ? emptyStat : seasonLowestDefended.map((i, idx) => `<div class="ps-record-line">${idx+1}. <b>${i.team}</b> ${scoreLineHtml(i)} defended v ${i.opponent}'s ${i.oppScore.runs}/${i.oppScore.wkts} (${formatOvers(i.oppScore.overs)})</div>`).join("")}</div>
+          </div>
+        </div>
+      </div>`;
 
     // Team-wise performance — like Pitchside's per-team Records tab: the
     // same record categories as the season-wide view above, filtered
@@ -3000,6 +3128,27 @@ function renderSeasonsAppDetail() {
     const teamTopRuns = topRuns.length ? [...seasonStats.batting].filter(b => b.team === selectedTeamName).sort((a, b) => b.runs - a.runs).slice(0, 10) : [];
     const teamTopWickets = [...seasonStats.bowling].filter(b => b.team === selectedTeamName).sort((a, b) => b.wickets - a.wickets || a.runs - b.runs).slice(0, 10);
     const teamTopMom = seasonMomTally.filter(p => p.teamName === selectedTeamName).slice(0, 10);
+    const teamTopScores = getTopScores(seasonRecords, 10, selectedTeamName);
+    const teamTopChases = getTopChases(seasonRecords, 10, selectedTeamName);
+    const teamLowScores = getLowScores(seasonRecords, 10, selectedTeamName);
+    const teamLowestDefended = getLowestDefended(seasonRecords, 10, selectedTeamName).filter(i => i.team === selectedTeamName);
+    // Team performance history — a chronological, match-by-match log of
+    // this team's own results through the season, not just aggregate
+    // leaderboards.
+    const teamHistory = seasonRecords
+      .filter(rec => rec.teamAName === selectedTeamName || rec.teamBName === selectedTeamName)
+      .map(rec => {
+        const r = rec.result;
+        const isFirst = r.firstTeamName === selectedTeamName;
+        const own = isFirst ? r.first : r.second;
+        const opp = isFirst ? r.second : r.first;
+        const ownScore = { runs: own.runs, wkts: own.wickets, overs: own.oversUsed };
+        const oppScore = { runs: opp.runs, wkts: opp.wickets, overs: opp.oversUsed };
+        const opponent = isFirst ? r.secondTeamName : r.firstTeamName;
+        const won = r.margin !== "Match tied" && ownScore.runs > oppScore.runs
+          ? true : (r.margin !== "Match tied" && ownScore.runs < oppScore.runs ? false : null);
+        return { opponent, ownScore, oppScore, won, margin: r.margin };
+      });
     const teamWiseHtml = teamIds.length === 0 ? "" : `
       <div class="ps-card">
         <div class="ps-card-header-row" style="margin-bottom:10px;">
@@ -3037,6 +3186,33 @@ function renderSeasonsAppDetail() {
               </tbody></table>`}
             </div>
           </div>
+        </div>
+        <p class="ps-stat-heading" style="margin-top:14px;">Team Records</p>
+        <div class="ps-stats-grid">
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Top Scores</div>
+            <div class="ps-scroll">${teamTopScores.length === 0 ? emptyStat : teamTopScores.map((i, idx) => `<div class="ps-record-line">${idx+1}. ${i.score.runs}/${i.score.wkts} (${formatOvers(i.score.overs)}) v ${i.opponent}</div>`).join("")}</div>
+          </div>
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Top Chases</div>
+            <div class="ps-scroll">${teamTopChases.length === 0 ? emptyStat : teamTopChases.map((i, idx) => `<div class="ps-record-line">${idx+1}. Chased ${i.score.runs}/${i.score.wkts} (${formatOvers(i.score.overs)}) v ${i.opponent}</div>`).join("")}</div>
+          </div>
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Lowest Scores</div>
+            <div class="ps-scroll">${teamLowScores.length === 0 ? emptyStat : teamLowScores.map((i, idx) => `<div class="ps-record-line">${idx+1}. ${i.score.runs}/${i.score.wkts} (${formatOvers(i.score.overs)}) v ${i.opponent}</div>`).join("")}</div>
+          </div>
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Lowest Defended</div>
+            <div class="ps-scroll">${teamLowestDefended.length === 0 ? emptyStat : teamLowestDefended.map((i, idx) => `<div class="ps-record-line">${idx+1}. ${i.score.runs}/${i.score.wkts} (${formatOvers(i.score.overs)}) v ${i.opponent}'s ${i.oppScore.runs}/${i.oppScore.wkts}</div>`).join("")}</div>
+          </div>
+        </div>
+        <p class="ps-stat-heading" style="margin-top:14px;">Match History</p>
+        <div class="ps-scroll" style="max-height:260px;">
+          ${teamHistory.length === 0 ? emptyStat : teamHistory.map(h => `
+            <div class="ps-record-line team-history-line">
+              <span class="team-history-result ${h.won === true ? "win" : h.won === false ? "loss" : "tie"}">${h.won === true ? "W" : h.won === false ? "L" : "T"}</span>
+              v ${h.opponent}: ${h.ownScore.runs}/${h.ownScore.wkts} (${formatOvers(h.ownScore.overs)}) — ${h.oppScore.runs}/${h.oppScore.wkts} (${formatOvers(h.oppScore.overs)}) · ${h.margin}
+            </div>`).join("")}
         </div>
       </div>`;
 
@@ -3080,6 +3256,7 @@ function renderSeasonsAppDetail() {
           </div>
         </div>
       </div>
+      ${seasonRecordsHtml}
       ${teamWiseHtml}`;
   }
 
@@ -3142,6 +3319,7 @@ function renderSeasonsAppDetail() {
     wireGroupCards(season, pitch, totalOvers);
     wireKnockoutCards(season, pitch, totalOvers);
     wireScorecardButtons();
+    wireSeasonSuperOverButtons(season, pitch, totalOvers);
   } else {
     const teamSelect = document.getElementById("seasonStatsTeamSelect");
     if (teamSelect) teamSelect.onchange = () => { seasonsStatsTeamId = Number(teamSelect.value); renderSeasonsAppDetail(); };
@@ -3165,6 +3343,32 @@ function wireScorecardButtons() {
 document.getElementById("closeSeasonScorecardBtn").addEventListener("click", () => {
   document.getElementById("seasonScorecardOverlay").style.display = "none";
 });
+
+/** Plays a Super Over directly from a tied season match's card — the
+ * winner is written back onto the match (tieWinnerId) so standings,
+ * knockout progression, and the season champion all correctly pick it
+ * up, exactly as if the tie had never happened for advancement
+ * purposes, while the tie itself still shows in the result line. */
+function wireSeasonSuperOverButtons(season, pitch, totalOvers) {
+  document.querySelectorAll(".play-so-btn").forEach(btn => {
+    btn.onclick = () => {
+      const allMatches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)];
+      const match = allMatches.find(m => m.id === Number(btn.dataset.matchId));
+      if (!match || !match.fullResult) return;
+      const teamA = getTeam(match.team1Id), teamB = getTeam(match.team2Id);
+      const matchPitch = pitchForMatch(match, pitch);
+      const superOver = simulateSuperOver({ matchResult: match.fullResult, teamA: teamPlayers(teamA), teamB: teamPlayers(teamB), pitch: matchPitch });
+      match.fullResult.superOver = superOver;
+      if (superOver.winnerTeamName) {
+        match.tieWinnerId = superOver.winnerTeamName === teamA.name ? teamA.id : teamB.id;
+      }
+      const historyMatch = appState.matches.find(hm => hm.seasonMatchId === match.id);
+      if (historyMatch) { historyMatch.result.superOver = superOver; idbPutMatch(historyMatch); }
+      persistState();
+      renderSeasonsAppDetail();
+    };
+  });
+}
 
 
 
@@ -3195,6 +3399,7 @@ function renderGroupCard(season, group, pitch, totalOvers) {
         <div class="ps-match-result-row">${formatMatchResultLine(m)}</div>
         ${m.mom ? `<div class="ps-match-mom-row">Player of the Match: ${m.mom}</div>` : ""}
         <div class="ps-match-actions-row">
+          ${(m.fullResult?.margin === "Match tied" && !m.tieWinnerId) ? `<button class="ps-ghost-btn play-so-btn" data-match-id="${m.id}">⚡ Play Super Over</button>` : ""}
           <button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>
           <button class="ps-remove-btn remove-group-match-btn" data-group-id="${group.id}" data-match-id="${m.id}">Remove</button>
         </div>
@@ -3242,6 +3447,7 @@ function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
         <div class="ps-match-result-row">${formatMatchResultLine(m)}</div>
         ${m.mom ? `<div class="ps-match-mom-row">Player of the Match: ${m.mom}</div>` : ""}
         <div class="ps-match-actions-row">
+          ${(m.fullResult?.margin === "Match tied" && !m.tieWinnerId) ? `<button class="ps-ghost-btn play-so-btn" data-match-id="${m.id}">⚡ Play Super Over</button>` : ""}
           <button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>
           <button class="ps-remove-btn remove-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Remove</button>
         </div>
@@ -3471,7 +3677,7 @@ document.getElementById("simulateBtn").addEventListener("click", () => {
     console.warn("Could not save the current match:", e);
   }
 
-  playBackMatch(result, teamColors);
+  playBackMatch(result, teamColors, { matchContext: { teamA: teamPlayers(teamAObj), teamB: teamPlayers(teamBObj), pitch } });
 });
 
 /** Plays the pre-computed match back ball by ball at ~2 overs (12 balls)
@@ -3521,7 +3727,7 @@ function playBackMatch(result, teamColors, opts) {
       if (inningsIdx >= innings.length) {
         liveLabel.textContent = "Match complete";
         liveScore.textContent = "";
-        renderCompleteScorecard(result, colors, finalSummaryEl);
+        renderCompleteScorecard(result, colors, finalSummaryEl, opts.matchContext);
         if (onComplete) onComplete();
         return;
       }
@@ -3580,18 +3786,23 @@ function buildTeamCard(battingTeamName, bowlingTeamName, battingColor, bowlingCo
  * finishes normally, and when restoring an already-finished match after a
  * page reload (the whole match is computed instantly up front, so a
  * reload never actually loses any computation, only the cosmetic replay). */
-function renderCompleteScorecard(result, colors, finalEl) {
+function renderCompleteScorecard(result, colors, finalEl, matchContext) {
   finalEl = finalEl || document.getElementById("finalSummary");
   const motmHtml = result.motm
     ? `<div class="motm-line">Man of the Match: <b>${result.motm.name}</b> (${result.motm.teamName})</div>`
     : "";
+  const superOverBtnHtml = (result.margin === "Match tied" && matchContext && !result.superOver)
+    ? `<button type="button" class="btn-primary play-super-over-btn" style="margin-top:8px;">⚡ Play Super Over</button>` : "";
+  const superOverHtml = result.superOver ? renderSuperOverSummary(result.superOver) : "";
   const scoreboardHtml = `
     <div class="scoreboard">
       <div class="side"><div class="team-label">${result.firstTeamName}</div><div class="score">${result.first.scoreText}</div></div>
       <div class="side"><div class="team-label">${result.secondTeamName}</div><div class="score">${result.second.scoreText}</div></div>
     </div>
     <div class="result-line">${result.margin}</div>
-    ${motmHtml}`;
+    ${motmHtml}
+    ${superOverHtml}
+    ${superOverBtnHtml}`;
 
   const firstCard = buildTeamCard(
     result.firstTeamName, result.secondTeamName,
@@ -3632,6 +3843,31 @@ function renderCompleteScorecard(result, colors, finalEl) {
   finalEl2.querySelector("#downloadScorecardBtn, .download-scorecard-btn").addEventListener("click", () => {
     downloadScorecardImage(finalEl2, `${result.firstTeamName}-vs-${result.secondTeamName}-scorecard`);
   });
+
+  const superOverBtn = finalEl2.querySelector(".play-super-over-btn");
+  if (superOverBtn) {
+    superOverBtn.addEventListener("click", () => {
+      result.superOver = simulateSuperOver({ matchResult: result, teamA: matchContext.teamA, teamB: matchContext.teamB, pitch: matchContext.pitch });
+      if (matchContext.onSuperOverPlayed) matchContext.onSuperOverPlayed(result.superOver);
+      renderCompleteScorecard(result, colors, finalEl, matchContext);
+    });
+  }
+}
+
+/** A tied match's Super Over result, shown as its own compact scoreboard
+ * beneath the tied main-match result. */
+function renderSuperOverSummary(so) {
+  const winnerLine = so.winnerTeamName ? `<b>${so.winnerTeamName}</b> ${so.margin}` : so.margin;
+  const attemptNote = so.attempt > 1 ? ` <span class="hint-text">(Super Over ${so.attempt})</span>` : "";
+  return `
+    <div class="super-over-summary">
+      <div class="super-over-heading">Super Over${attemptNote}</div>
+      <div class="scoreboard">
+        <div class="side"><div class="team-label">${so.firstTeamName}</div><div class="score">${so.first.scoreText}</div></div>
+        <div class="side"><div class="team-label">${so.secondTeamName}</div><div class="score">${so.second.scoreText}</div></div>
+      </div>
+      <div class="result-line">${winnerLine}</div>
+    </div>`;
 }
 
 /** Captures the currently-active scorecard tab as a shareable PNG image —
