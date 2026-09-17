@@ -236,6 +236,13 @@
   .sq-card-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .sq-card-name { color: var(--cream); font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sq-card-meta { color: var(--cream-dim); font-size: 10.5px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.01em; }
+  .ground-country-heading {
+    font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--amber); font-size: 12px; margin-top: 16px; margin-bottom: 6px;
+  }
+  .ground-country-heading:first-of-type { margin-top: 8px; }
+  .ground-card .sq-card-body { gap: 3px; }
+  .ground-nature { color: var(--cream-dim); font-size: 11.5px; font-family: 'Inter', sans-serif; line-height: 1.4; }
   .sq-remove-btn {
     flex-shrink: 0; background: rgba(193,68,60,0.08); border: 1px solid rgba(193,68,60,0.35);
     color: var(--wicket); font-size: 11px; font-weight: 600; min-height: unset;
@@ -1461,28 +1468,58 @@ const DEFAULT_STYLES_B = ["Right Arm Medium","Right Arm Off Break","Right Arm Le
 // well-known historical playing character (public cricket knowledge —
 // commentary boxes have described these tendencies for decades).
 const PRESET_GROUNDS = [
-  { name: "Wankhede Stadium, Mumbai", speed: 7, grip: 4, bounce: 6, variation: 4, deterioration: 5 },
-  { name: "Melbourne Cricket Ground", speed: 7, grip: 3, bounce: 7, variation: 3, deterioration: 4 },
-  { name: "Adelaide Oval", speed: 6, grip: 3, bounce: 6, variation: 3, deterioration: 3 },
-  { name: "Eden Gardens, Kolkata", speed: 4, grip: 6, bounce: 5, variation: 6, deterioration: 7 },
-  { name: "The Oval, London", speed: 6, grip: 4, bounce: 6, variation: 5, deterioration: 4 },
-  { name: "Lord's, London", speed: 6, grip: 5, bounce: 6, variation: 6, deterioration: 4 },
-  { name: "Sydney Cricket Ground", speed: 5, grip: 7, bounce: 6, variation: 6, deterioration: 7 },
-  { name: "M. A. Chidambaram Stadium, Chennai", speed: 3, grip: 8, bounce: 4, variation: 7, deterioration: 8 },
-  { name: "Newlands, Cape Town", speed: 7, grip: 4, bounce: 8, variation: 4, deterioration: 4 },
-  { name: "Old Trafford, Manchester", speed: 6, grip: 5, bounce: 5, variation: 5, deterioration: 5 },
-  { name: "Dubai International Stadium", speed: 4, grip: 6, bounce: 5, variation: 5, deterioration: 6 },
-  { name: "Narendra Modi Stadium, Ahmedabad", speed: 7, grip: 3, bounce: 7, variation: 3, deterioration: 4 },
-  { name: "Perth Stadium", speed: 8, grip: 2, bounce: 8, variation: 3, deterioration: 3 },
-  { name: "Kensington Oval, Barbados", speed: 6, grip: 4, bounce: 6, variation: 4, deterioration: 4 },
-  { name: "The Wanderers, Johannesburg", speed: 8, grip: 3, bounce: 7, variation: 3, deterioration: 4 },
-  { name: "R Premadasa Stadium, Colombo", speed: 4, grip: 7, bounce: 4, variation: 6, deterioration: 7 },
-  { name: "Sharjah Cricket Stadium", speed: 4, grip: 6, bounce: 5, variation: 5, deterioration: 6 },
-  { name: "Basin Reserve, Wellington", speed: 6, grip: 4, bounce: 6, variation: 5, deterioration: 4 },
-  { name: "Gaddafi Stadium, Lahore", speed: 5, grip: 6, bounce: 5, variation: 5, deterioration: 6 },
-  { name: "Arun Jaitley Stadium, Delhi", speed: 5, grip: 5, bounce: 5, variation: 5, deterioration: 5 },
-  { name: "Providence Stadium, Guyana", speed: 6, grip: 5, bounce: 6, variation: 5, deterioration: 5 },
-  { name: "Custom", speed: null, grip: null, bounce: null, variation: null, deterioration: null },
+  // India
+  { name: "Wankhede Stadium, Mumbai", country: "India", nature: "Good pace and carry for a subcontinent pitch with true bounce; historically high-scoring with short square boundaries.", speed: 7, grip: 4, bounce: 6, variation: 4, deterioration: 5 },
+  { name: "Eden Gardens, Kolkata", country: "India", nature: "Slow, turning track that wears quickly — spin bowling comes into its own as the match goes on.", speed: 4, grip: 6, bounce: 5, variation: 6, deterioration: 7 },
+  { name: "M. A. Chidambaram Stadium, Chennai", country: "India", nature: "One of the most spin-friendly surfaces in world cricket; low and slow with sharp turn, especially under lights.", speed: 3, grip: 8, bounce: 4, variation: 7, deterioration: 8 },
+  { name: "Narendra Modi Stadium, Ahmedabad", country: "India", nature: "Large, true surface with good carry — favours batters early, with pace bowlers rewarded for extra bounce.", speed: 7, grip: 3, bounce: 7, variation: 3, deterioration: 4 },
+  { name: "Arun Jaitley Stadium, Delhi", country: "India", nature: "A balanced surface offering something for both seam and spin without heavily favouring either.", speed: 5, grip: 5, bounce: 5, variation: 5, deterioration: 5 },
+  { name: "M. Chinnaswamy Stadium, Bangalore", country: "India", nature: "Notoriously batting-friendly with short boundaries and thin air aiding big hitting — a tough day out for bowlers.", speed: 7, grip: 3, bounce: 6, variation: 3, deterioration: 4 },
+  { name: "Punjab Cricket Association Stadium, Mohali", country: "India", nature: "Historically offers good pace and even bounce for seamers throughout the innings.", speed: 6, grip: 4, bounce: 6, variation: 4, deterioration: 4 },
+  // Australia
+  { name: "Melbourne Cricket Ground", country: "Australia", nature: "A vast outfield and a hard, true pitch — consistent bounce rewards good batting technique.", speed: 7, grip: 3, bounce: 7, variation: 3, deterioration: 4 },
+  { name: "Adelaide Oval", country: "Australia", nature: "A traditionally flat, batting-friendly deck with even bounce from start to finish.", speed: 6, grip: 3, bounce: 6, variation: 3, deterioration: 3 },
+  { name: "Sydney Cricket Ground", country: "Australia", nature: "Renowned for turn, especially as the match wears on — spinners are a genuine attacking option here.", speed: 5, grip: 7, bounce: 6, variation: 6, deterioration: 7 },
+  { name: "Perth Stadium", country: "Australia", nature: "The fastest, bounciest surface in the country; express pace bowlers thrive on the extra carry.", speed: 8, grip: 2, bounce: 8, variation: 3, deterioration: 3 },
+  { name: "The Gabba, Brisbane", country: "Australia", nature: "Historically quick and bouncy with good carry for pace, making it a tough venue for visiting batters.", speed: 8, grip: 3, bounce: 7, variation: 3, deterioration: 4 },
+  { name: "Bellerive Oval, Hobart", country: "Australia", nature: "A fair, well-grassed surface offering even assistance to both bat and ball.", speed: 6, grip: 4, bounce: 6, variation: 4, deterioration: 4 },
+  // England
+  { name: "The Oval, London", country: "England", nature: "A good batting surface early on, offering more to spin and reverse swing as it dries out.", speed: 6, grip: 4, bounce: 6, variation: 5, deterioration: 4 },
+  { name: "Lord's, London", country: "England", nature: "The famous slope adds an extra dimension — a fair pitch that rewards classical technique.", speed: 6, grip: 5, bounce: 6, variation: 6, deterioration: 4 },
+  { name: "Old Trafford, Manchester", country: "England", nature: "A well-balanced surface, though it can turn appreciably in the back half of an innings.", speed: 6, grip: 5, bounce: 5, variation: 5, deterioration: 5 },
+  { name: "Edgbaston, Birmingham", country: "England", nature: "A pacy, high-scoring venue with good carry that rewards positive batting.", speed: 6, grip: 4, bounce: 6, variation: 4, deterioration: 4 },
+  { name: "Headingley, Leeds", country: "England", nature: "Can offer early seam movement, with variable bounce as the overs accumulate.", speed: 6, grip: 4, bounce: 5, variation: 5, deterioration: 5 },
+  { name: "Trent Bridge, Nottingham", country: "England", nature: "One of England's flattest, most batting-friendly tracks with short square boundaries.", speed: 6, grip: 3, bounce: 6, variation: 3, deterioration: 3 },
+  // South Africa
+  { name: "Newlands, Cape Town", country: "South Africa", nature: "Extra bounce off a hard surface makes life difficult for batters against the short ball.", speed: 7, grip: 4, bounce: 8, variation: 4, deterioration: 4 },
+  { name: "The Wanderers, Johannesburg", country: "South Africa", nature: "High altitude adds carry and pace — the 'Bullring' is fast and bouncy, favouring quicks.", speed: 8, grip: 3, bounce: 7, variation: 3, deterioration: 4 },
+  { name: "Kingsmead, Durban", country: "South Africa", nature: "Humid conditions can help seam and swing early, with turn on offer later in the match.", speed: 6, grip: 5, bounce: 6, variation: 5, deterioration: 5 },
+  { name: "SuperSport Park, Centurion", country: "South Africa", nature: "A hard, true pitch with good carry that has historically produced strong totals.", speed: 7, grip: 4, bounce: 7, variation: 4, deterioration: 4 },
+  // West Indies
+  { name: "Kensington Oval, Barbados", country: "West Indies", nature: "A traditionally fast Caribbean track with even bounce, favouring genuine pace.", speed: 6, grip: 4, bounce: 6, variation: 4, deterioration: 4 },
+  { name: "Providence Stadium, Guyana", country: "West Indies", nature: "A fair surface offering a reasonable balance between bat and ball.", speed: 6, grip: 5, bounce: 6, variation: 5, deterioration: 5 },
+  { name: "Sabina Park, Jamaica", country: "West Indies", nature: "Historically one of the quickest, bounciest pitches anywhere in the Caribbean.", speed: 7, grip: 3, bounce: 7, variation: 3, deterioration: 4 },
+  { name: "Queen's Park Oval, Trinidad", country: "West Indies", nature: "Slower and more spin-friendly than most Caribbean venues, taking turn as the game progresses.", speed: 4, grip: 6, bounce: 5, variation: 6, deterioration: 6 },
+  // New Zealand
+  { name: "Basin Reserve, Wellington", country: "New Zealand", nature: "Coastal winds and a true surface make for entertaining, balanced cricket.", speed: 6, grip: 4, bounce: 6, variation: 5, deterioration: 4 },
+  { name: "Eden Park, Auckland", country: "New Zealand", nature: "Short, quirky boundaries make this one of the most batting-friendly grounds anywhere.", speed: 6, grip: 3, bounce: 6, variation: 3, deterioration: 3 },
+  { name: "Hagley Oval, Christchurch", country: "New Zealand", nature: "A fresh, well-grassed surface that can offer early assistance to the new ball.", speed: 6, grip: 4, bounce: 5, variation: 4, deterioration: 4 },
+  // Pakistan
+  { name: "Gaddafi Stadium, Lahore", country: "Pakistan", nature: "A balanced subcontinent surface that slows down and grips more as the match wears on.", speed: 5, grip: 6, bounce: 5, variation: 5, deterioration: 6 },
+  { name: "National Stadium, Karachi", country: "Pakistan", nature: "A generally batting-friendly deck with even bounce throughout.", speed: 5, grip: 5, bounce: 5, variation: 5, deterioration: 5 },
+  { name: "Rawalpindi Cricket Stadium", country: "Pakistan", nature: "One of Pakistan's flatter, more run-heavy surfaces.", speed: 6, grip: 4, bounce: 6, variation: 4, deterioration: 4 },
+  // Sri Lanka
+  { name: "R Premadasa Stadium, Colombo", country: "Sri Lanka", nature: "Low, slow and turning — spinners dominate as the surface deteriorates.", speed: 4, grip: 7, bounce: 4, variation: 6, deterioration: 7 },
+  { name: "Pallekele International Cricket Stadium", country: "Sri Lanka", nature: "A fair surface offering turn for spinners without being unplayable for batters.", speed: 5, grip: 6, bounce: 5, variation: 5, deterioration: 6 },
+  { name: "Galle International Stadium", country: "Sri Lanka", nature: "A historic ground known for sharp, early turn that only increases as the match progresses.", speed: 4, grip: 7, bounce: 4, variation: 6, deterioration: 7 },
+  // Bangladesh
+  { name: "Sher-e-Bangla National Stadium, Dhaka", country: "Bangladesh", nature: "Slow and low, offering significant help to spin from the outset.", speed: 3, grip: 7, bounce: 4, variation: 6, deterioration: 7 },
+  { name: "Zahur Ahmed Chowdhury Stadium, Chattogram", country: "Bangladesh", nature: "A generally slow surface that rewards patient batting and disciplined spin.", speed: 4, grip: 6, bounce: 4, variation: 5, deterioration: 6 },
+  // UAE
+  { name: "Dubai International Stadium", country: "UAE", nature: "Slow and gripping, especially in the latter stages under lights.", speed: 4, grip: 6, bounce: 5, variation: 5, deterioration: 6 },
+  { name: "Sharjah Cricket Stadium", country: "UAE", nature: "A compact ground with a slow surface that increasingly favours spin.", speed: 4, grip: 6, bounce: 5, variation: 5, deterioration: 6 },
+  { name: "Zayed Cricket Stadium, Abu Dhabi", country: "UAE", nature: "A fair, neutral surface offering balanced conditions for bat and ball.", speed: 5, grip: 5, bounce: 5, variation: 5, deterioration: 5 },
+  { name: "Custom", country: "Custom", nature: "", speed: null, grip: null, bounce: null, variation: null, deterioration: null },
 ];
 
 /** Every ground a select/checkbox list can offer: built-in presets (real
@@ -1891,14 +1928,20 @@ document.getElementById("playerSearchInput").addEventListener("input", () => ren
 function renderGroundsTab() {
   persistState();
   const list = document.getElementById("groundsList");
-  const presetRows = PRESET_GROUNDS.filter(g => g.name !== "Custom").map(g => `
-    <div class="sq-player-card">
-      <div class="sq-card-body">
-        <span class="sq-card-name">${g.name}</span>
-        <span class="sq-card-meta">Speed ${g.speed} · Grip ${g.grip} · Bounce ${g.bounce} · Variation ${g.variation} · Deterioration ${g.deterioration}</span>
-      </div>
-      <span class="hint-text" style="flex-shrink:0;">Built-in</span>
-    </div>`).join("");
+  const presets = PRESET_GROUNDS.filter(g => g.name !== "Custom");
+  const countries = [...new Set(presets.map(g => g.country))];
+  const presetSectionsHtml = countries.map(country => {
+    const rows = presets.filter(g => g.country === country).map(g => `
+      <div class="sq-player-card ground-card">
+        <div class="sq-card-body">
+          <span class="sq-card-name">${g.name}</span>
+          <span class="ground-nature">${g.nature}</span>
+          <span class="sq-card-meta">Speed ${g.speed} · Grip ${g.grip} · Bounce ${g.bounce} · Variation ${g.variation} · Deterioration ${g.deterioration}</span>
+        </div>
+        <span class="hint-text" style="flex-shrink:0;">Built-in</span>
+      </div>`).join("");
+    return `<p class="hint-text ground-country-heading">${country}</p><div class="player-list">${rows}</div>`;
+  }).join("");
   const customRows = appState.grounds.map((g, idx) => `
     <div class="sq-player-card" data-ground-idx="${idx}">
       <div class="sq-card-body">
@@ -1910,8 +1953,8 @@ function renderGroundsTab() {
     </div>`).join("");
 
   list.innerHTML = `
-    <p class="hint-text" style="margin-top:14px; margin-bottom:6px;">Built-in grounds</p>
-    <div class="player-list">${presetRows}</div>
+    <p class="hint-text" style="margin-top:14px; margin-bottom:6px;">Built-in grounds, by country</p>
+    ${presetSectionsHtml}
     <p class="hint-text" style="margin-top:18px; margin-bottom:6px;">Your grounds</p>
     <div class="player-list">${customRows || '<p class="hint-text">No custom grounds yet — add one above.</p>'}</div>
   `;
