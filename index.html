@@ -84,6 +84,11 @@
   }
   .field label { display: block; font-size: 12px; color: var(--cream-dim); margin-bottom: 6px; }
   .field .val { color: var(--amber); font-family: 'JetBrains Mono', monospace; }
+  .player-filter-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .player-filter-row select {
+    background: rgba(255,255,255,0.06); border: 1px solid var(--line); color: var(--cream);
+    border-radius: 6px; padding: 7px 10px; font-size: 12.5px; font-family: 'Inter', sans-serif; min-height: unset; flex: 1 1 120px;
+  }
   input[type="range"] { width: 100%; accent-color: var(--pitch-light); height: 32px; }
   input[type="number"], input[type="text"] {
     background: rgba(255,255,255,0.06);
@@ -237,6 +242,18 @@
     padding: 6px 12px; border-radius: 6px; transition: all 0.12s;
   }
   .sq-remove-btn:hover { background: rgba(193,68,60,0.18); border-color: var(--wicket); filter: none; }
+
+  .add-player-section { margin-top: 12px; }
+  #addPlayerSearchInput { margin-bottom: 8px; }
+  .add-player-list { max-height: 260px; overflow-y: auto; border-radius: 8px; }
+  .add-player-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: rgba(255,255,255,0.03); border-radius: 8px; padding: 9px 12px; margin-bottom: 6px;
+  }
+  .add-player-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .add-player-name { font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13.5px; color: var(--cream); }
+  .add-player-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cream-dim); }
+  .add-player-btn { flex-shrink: 0; min-height: unset; padding: 6px 12px; font-size: 12px; }
   .team-selector-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
   .team-selector-pill {
     display: flex; align-items: center; gap: 7px; background: rgba(255,255,255,0.04);
@@ -566,6 +583,7 @@
   <h1>MATCH<span>SIM</span></h1>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
+  <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
 </header>
 
 <main>
@@ -573,7 +591,6 @@
   <div class="tab-nav">
     <button class="tab-btn active" data-tab="playerdb">Player DB</button>
     <button class="tab-btn" data-tab="teams">Select Teams</button>
-    <button class="tab-btn" data-tab="quickmatch">Quick Match</button>
     <button class="tab-btn" data-tab="stats">Stats &amp; History</button>
     <button class="tab-btn" data-tab="records">Records</button>
     <button class="tab-btn" data-tab="grounds">Grounds</button>
@@ -585,7 +602,13 @@
         <h2>Player Database</h2>
         <button class="btn-primary" id="addPlayerBtn">+ Add player</button>
       </div>
-      <input type="text" id="playerSearchInput" placeholder="Search players by name…" style="margin-bottom:14px;" />
+      <input type="text" id="playerSearchInput" placeholder="Search players by name…" style="margin-bottom:10px;" />
+      <div class="player-filter-row">
+        <select id="playerFilterRole"><option value="">All roles</option><option value="allrounder">All-rounder</option><option value="purebatter">Pure Batter</option><option value="keeper">Wicketkeeper</option><option value="purebowler">Pure Bowler</option></select>
+        <select id="playerFilterSkill"><option value="">All skills</option></select>
+        <select id="playerFilterBowlType"><option value="">Seam or spin</option><option value="seam">Seam</option><option value="spin">Spin</option></select>
+        <select id="playerFilterRating"><option value="0">Any rating</option><option value="90">90+</option><option value="80">80+</option><option value="70">70+</option><option value="60">60+</option></select>
+      </div>
       <div id="playerDbList"></div>
     </div>
   </div>
@@ -1788,18 +1811,37 @@ function skillChipHtml(rating, isPremiumSkill, shortSkill) {
   return `<span class="chip ${ratingTierClass(rating)}">${rating}<span class="skill ${isPremiumSkill ? "skill-gold" : ""}">${shortSkill || ""}</span></span>`;
 }
 
+const SEAM_BOWLING_STYLES = ["Right Arm Fast", "Left Arm Fast", "Right Arm Fast Medium", "Left Arm Fast Medium", "Right Arm Medium", "Left Arm Medium"];
+const SPIN_BOWLING_STYLES = ["Right Arm Off Break", "Slow Left Arm Orthodox", "Right Arm Leg Spin", "Left Arm Chinaman"];
+
 function renderPlayerDbList() {
   const list = document.getElementById("playerDbList");
   const searchInput = document.getElementById("playerSearchInput");
   const query = (searchInput.value || "").trim().toLowerCase();
-  const filtered = query ? appState.players.filter(p => p.name.toLowerCase().includes(query)) : appState.players;
+
+  const skillSelect = document.getElementById("playerFilterSkill");
+  if (skillSelect.options.length <= 1) {
+    const skillOptions = [...BATTING_SKILLS.filter(s => s !== "None"), ...BOWLING_SKILLS.filter(s => s !== "None")];
+    skillSelect.innerHTML += skillOptions.map(s => `<option value="${s}">${s}</option>`).join("");
+  }
+  const roleFilter = document.getElementById("playerFilterRole").value;
+  const skillFilter = document.getElementById("playerFilterSkill").value;
+  const bowlTypeFilter = document.getElementById("playerFilterBowlType").value;
+  const ratingFilter = Number(document.getElementById("playerFilterRating").value) || 0;
+
+  let filtered = query ? appState.players.filter(p => p.name.toLowerCase().includes(query)) : appState.players;
+  if (roleFilter) filtered = filtered.filter(p => (p.role || "allrounder") === roleFilter);
+  if (skillFilter) filtered = filtered.filter(p => p.battingSkill === skillFilter || p.bowlingSkill === skillFilter);
+  if (bowlTypeFilter === "seam") filtered = filtered.filter(p => SEAM_BOWLING_STYLES.includes(p.bowlingStyle));
+  if (bowlTypeFilter === "spin") filtered = filtered.filter(p => SPIN_BOWLING_STYLES.includes(p.bowlingStyle));
+  if (ratingFilter > 0) filtered = filtered.filter(p => Math.max(p.batting, p.bowling) >= ratingFilter);
 
   if (appState.players.length === 0) {
     list.innerHTML = `<p class="hint-text">No players yet — add some to get started.</p>`;
     return;
   }
   if (filtered.length === 0) {
-    list.innerHTML = `<p class="hint-text">No players match "${searchInput.value}".</p>`;
+    list.innerHTML = `<p class="hint-text">No players match the current search/filters.</p>`;
     return;
   }
   // ranked by the player's higher rating (bat or bowl), same as Squad Ledger's leaderboard sort
@@ -1842,6 +1884,9 @@ function renderPlayerDbList() {
 
 document.getElementById("addPlayerBtn").addEventListener("click", () => openPlayerModal(null));
 document.getElementById("playerSearchInput").addEventListener("input", () => renderPlayerDbList());
+["playerFilterRole", "playerFilterSkill", "playerFilterBowlType", "playerFilterRating"].forEach(id => {
+  document.getElementById(id).addEventListener("change", () => renderPlayerDbList());
+});
 
 // ============================================================
 // Grounds tab
@@ -2084,7 +2129,6 @@ function renderTeamsTab() {
       <button class="sq-remove-btn remove-link" data-player-id="${p.id}">Remove</button>
     </div>`).join("");
   const available = unassignedPlayers();
-  const addOptions = available.map(p => `<option value="${p.id}">${p.name}</option>`).join("");
 
   const builderHtml = `
     <div class="team-card" data-team-id="${team.id}">
@@ -2095,16 +2139,17 @@ function renderTeamsTab() {
       </div>
       <p class="hint-text">Use ▲▼ to set batting order — position 1 bats first.</p>
       <div class="player-list">${rows || '<p class="hint-text">No players assigned yet.</p>'}</div>
+      <div class="add-player-section">
+        <input type="text" id="addPlayerSearchInput" placeholder="Search unassigned players by name…" ${available.length === 0 ? "disabled" : ""} />
+        <div id="addPlayerListContainer"></div>
+      </div>
       <div class="add-to-team-row">
-        <select data-role="addplayer" ${available.length === 0 ? "disabled" : ""}>
-          <option value="">${available.length === 0 ? "No unassigned players" : "Add a player…"}</option>
-          ${addOptions}
-        </select>
         <button class="btn-ghost delete-team-btn">Delete team</button>
       </div>
     </div>`;
 
   container.innerHTML = selectorHtml + builderHtml;
+  renderAvailablePlayersList(team);
 
   container.querySelectorAll(".team-selector-pill").forEach(btn => {
     btn.addEventListener("click", () => { currentTeamView = Number(btn.dataset.teamId); renderTeamsTab(); });
@@ -2131,18 +2176,56 @@ function renderTeamsTab() {
       renderTeamsTab();
     });
   });
-  const addSelect = container.querySelector('[data-role="addplayer"]');
-  if (addSelect) {
-    addSelect.addEventListener("change", () => {
-      if (!addSelect.value) return;
-      team.playerIds.push(Number(addSelect.value));
-      renderTeamsTab();
-    });
-  }
+  const addPlayerSearchInput = container.querySelector("#addPlayerSearchInput");
+  if (addPlayerSearchInput) addPlayerSearchInput.addEventListener("input", () => renderAvailablePlayersList(team));
   container.querySelector(".delete-team-btn").addEventListener("click", () => {
     appState.teams = appState.teams.filter(t => t.id !== team.id);
     currentTeamView = null;
     renderTeamsTab();
+  });
+}
+
+/** The searchable "add a player" list below a team's roster. Kept as its
+ * own render target (not part of the full renderTeamsTab rebuild) so
+ * typing in the search box doesn't reset focus on every keystroke —
+ * same pattern as the Player DB search. */
+function renderAvailablePlayersList(team) {
+  const listEl = document.getElementById("addPlayerListContainer");
+  if (!listEl) return;
+  const searchInput = document.getElementById("addPlayerSearchInput");
+  const query = (searchInput?.value || "").trim().toLowerCase();
+  const available = unassignedPlayers();
+  const filtered = query ? available.filter(p => p.name.toLowerCase().includes(query)) : available;
+
+  if (available.length === 0) {
+    listEl.innerHTML = `<p class="hint-text">No unassigned players — every player is already on a team.</p>`;
+    return;
+  }
+  if (filtered.length === 0) {
+    listEl.innerHTML = `<p class="hint-text">No unassigned players match "${searchInput.value}".</p>`;
+    return;
+  }
+  const ranked = [...filtered].sort((a, b) => Math.max(b.batting, b.bowling) - Math.max(a.batting, a.bowling));
+  listEl.innerHTML = `<div class="add-player-list">${ranked.map(p => {
+    const roleLabel = { allrounder: "All-rounder", purebatter: "Pure Batter", keeper: "Wicketkeeper", purebowler: "Pure Bowler" }[p.role || "allrounder"];
+    const batText = p.role === "purebowler" ? "" : `Bat ${p.batting}`;
+    const bowlText = (p.role === "purebatter" || p.role === "keeper") ? "" : `Bowl ${p.bowling}`;
+    const meta = [batText, bowlText].filter(Boolean).join(" · ");
+    return `
+    <div class="add-player-row" data-player-id="${p.id}">
+      <div class="add-player-info">
+        <span class="add-player-name">${p.name}${p.isWicketKeeper ? ` <span class="hint-text" style="font-size:10px;">WK</span>` : ""}</span>
+        <span class="add-player-meta">${meta} · ${roleLabel}</span>
+      </div>
+      <button class="btn-ghost add-player-btn" data-player-id="${p.id}">+ Add</button>
+    </div>`;
+  }).join("")}</div>`;
+
+  listEl.querySelectorAll(".add-player-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      team.playerIds.push(Number(btn.dataset.playerId));
+      renderTeamsTab();
+    });
   });
 }
 
@@ -2466,7 +2549,7 @@ function renderStatsTab() {
   const sorted = [...appState.matches].sort((a, b) => b.timestamp - a.timestamp);
   historyEl.innerHTML = sorted.map(m => {
     const mom = m.result.motm ? `${m.result.motm.name} (${m.result.motm.teamName})` : "";
-    const sourceLabel = m.source === "season" ? "Season" : "Quick Match";
+    const sourceLabel = m.source === "season" ? "Season" : "Friendly";
     const winnerName = m.result.margin === "Match tied" ? null
       : (m.result.second.runs > m.result.first.runs ? m.result.secondTeamName : m.result.firstTeamName);
     const resultText = winnerName ? `${winnerName} ${m.result.margin}` : "Match tied";
@@ -2663,6 +2746,7 @@ function renderRecordsTab() {
 let seasonsAppScreen = "home"; // "home" | "detail"
 let seasonsAppActiveSeasonId = null;
 let seasonsDetailTab = "matches"; // "matches" | "stats"
+let seasonsStatsTeamId = null; // which team's filtered records to show in the Stats tab
 
 function getSeason(id) { return appState.seasons.find(s => s.id === id); }
 
@@ -2852,6 +2936,68 @@ function renderSeasonsAppDetail() {
     const topWickets = [...seasonStats.bowling].sort((a, b) => b.wickets - a.wickets || a.runs - b.runs).slice(0, 15);
     const topMom = seasonMomTally.slice(0, 15);
     const emptyStat = `<p class="ps-empty">No matches played yet this season.</p>`;
+
+    // Team-wise performance — like Pitchside's per-team Records tab: the
+    // same record categories as the season-wide view above, filtered
+    // down to one team at a time, plus that team's own W/L record.
+    const teamIds = seasonTeamIds(season);
+    if (seasonsStatsTeamId === null || !teamIds.includes(seasonsStatsTeamId)) seasonsStatsTeamId = teamIds[0] || null;
+    const selectedTeamName = seasonsStatsTeamId ? getTeam(seasonsStatsTeamId)?.name : null;
+    const teamOptionsHtml = teamIds.map(id => `<option value="${id}" ${id === seasonsStatsTeamId ? "selected" : ""}>${getTeam(id)?.name}</option>`).join("");
+    let teamRecord = { played: 0, won: 0, lost: 0, tied: 0 };
+    seasonRecords.forEach(rec => {
+      if (rec.teamAName !== selectedTeamName && rec.teamBName !== selectedTeamName) return;
+      teamRecord.played++;
+      const r = rec.result;
+      const oppRuns = r.firstTeamName === selectedTeamName ? r.second.runs : r.first.runs;
+      const ownRuns = r.firstTeamName === selectedTeamName ? r.first.runs : r.second.runs;
+      if (r.margin === "Match tied") teamRecord.tied++;
+      else if (ownRuns > oppRuns) teamRecord.won++;
+      else teamRecord.lost++;
+    });
+    const teamTopRuns = topRuns.length ? [...seasonStats.batting].filter(b => b.team === selectedTeamName).sort((a, b) => b.runs - a.runs).slice(0, 10) : [];
+    const teamTopWickets = [...seasonStats.bowling].filter(b => b.team === selectedTeamName).sort((a, b) => b.wickets - a.wickets || a.runs - b.runs).slice(0, 10);
+    const teamTopMom = seasonMomTally.filter(p => p.teamName === selectedTeamName).slice(0, 10);
+    const teamWiseHtml = teamIds.length === 0 ? "" : `
+      <div class="ps-card">
+        <div class="ps-card-header-row" style="margin-bottom:10px;">
+          <span class="ps-card-title" style="margin-bottom:0;">Team-wise Performance</span>
+          <select class="ps-select" id="seasonStatsTeamSelect">${teamOptionsHtml}</select>
+        </div>
+        <div class="ps-summary-row" style="margin-bottom:14px;">
+          <div class="ps-summary-stat"><b>${teamRecord.played}</b><span>Played</span></div>
+          <div class="ps-summary-stat"><b>${teamRecord.won}</b><span>Won</span></div>
+          <div class="ps-summary-stat"><b>${teamRecord.lost}</b><span>Lost</span></div>
+          <div class="ps-summary-stat"><b>${teamRecord.tied}</b><span>Tied</span></div>
+        </div>
+        <div class="ps-stats-grid">
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Top Run Scorers</div>
+            <div class="ps-scroll">
+              ${teamTopRuns.length === 0 ? emptyStat : `<table class="ps-table"><thead><tr><th>#</th><th>Player</th><th>Runs</th><th>SR</th></tr></thead><tbody>
+                ${teamTopRuns.map((b, i) => `<tr><td>${i+1}</td><td>${b.name}</td><td class="ps-mono"><b>${b.runs}</b></td><td class="ps-mono">${((b.runs/Math.max(1,b.balls))*100).toFixed(1)}</td></tr>`).join("")}
+              </tbody></table>`}
+            </div>
+          </div>
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Top Wicket Takers</div>
+            <div class="ps-scroll">
+              ${teamTopWickets.length === 0 ? emptyStat : `<table class="ps-table"><thead><tr><th>#</th><th>Player</th><th>Wkts</th><th>Econ</th></tr></thead><tbody>
+                ${teamTopWickets.map((b, i) => `<tr><td>${i+1}</td><td>${b.name}</td><td class="ps-mono"><b>${b.wickets}</b></td><td class="ps-mono">${(b.runs/Math.max(0.1,b.overs)).toFixed(2)}</td></tr>`).join("")}
+              </tbody></table>`}
+            </div>
+          </div>
+          <div class="ps-stat-col">
+            <div class="ps-stat-heading">Most MOM Awards</div>
+            <div class="ps-scroll">
+              ${teamTopMom.length === 0 ? emptyStat : `<table class="ps-table"><thead><tr><th>#</th><th>Player</th><th>MOM</th></tr></thead><tbody>
+                ${teamTopMom.map((p, i) => `<tr><td>${i+1}</td><td>${p.name}</td><td class="ps-mono"><b>${p.count}</b></td></tr>`).join("")}
+              </tbody></table>`}
+            </div>
+          </div>
+        </div>
+      </div>`;
+
     contentHtml = `
       <div class="ps-card">
         <div class="ps-card-title">Points Table</div>
@@ -2891,7 +3037,8 @@ function renderSeasonsAppDetail() {
             </div>
           </div>
         </div>
-      </div>`;
+      </div>
+      ${teamWiseHtml}`;
   }
 
   const allSeasonMatches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)];
@@ -2953,6 +3100,9 @@ function renderSeasonsAppDetail() {
     wireGroupCards(season, pitch, totalOvers);
     wireKnockoutCards(season, pitch, totalOvers);
     wireScorecardButtons();
+  } else {
+    const teamSelect = document.getElementById("seasonStatsTeamSelect");
+    if (teamSelect) teamSelect.onchange = () => { seasonsStatsTeamId = Number(teamSelect.value); renderSeasonsAppDetail(); };
   }
 }
 
