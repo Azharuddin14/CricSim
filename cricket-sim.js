@@ -276,7 +276,7 @@ function pickDismissal(bowler, hasKeeper) {
 /** Pure weighted pick from a candidate pool — rating plus phase/style fit
  * (seamers early and at the death, spin through the middle), with a named
  * skill stacking an extra boost on top. */
-function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns, runsLeaking, holdback) {
+function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns, runsLeaking, heldBackBowlers) {
   // powerplay-equivalent window: first 6 overs + 2 more (8 of 20), scaled
   // proportionally for other match lengths
   const earlyPhase = over < Math.round(totalOvers * 0.4);
@@ -358,7 +358,7 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns, runsLeak
     // dominant that a mild penalty barely slows them down, and they'd
     // burn through all 4 overs in the powerplay alone, leaving nothing
     // held back for the death overs they were specifically reserved for
-    if (holdback === b && !runsLeaking) w *= 0.12;
+    if (heldBackBowlers && heldBackBowlers.includes(b) && !runsLeaking) w *= 0.03;
 
     return w;
   });
@@ -377,7 +377,7 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns, runsLeak
  * previous over is always excluded first, before any type preference,
  * so the same bowler can never go two overs in a row.
  */
-function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler, runsLeaking }) {
+function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowlers, runsLeaking }) {
   const generalMax = Math.max(1, Math.ceil(totalOvers / 5));
   // a bowler with no recognized bowling skill ("X") is a genuine part-timer
   // — never worth more than 2 overs across the whole innings regardless of
@@ -415,18 +415,19 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
     return true;
   }
 
-  // A team's best death specialist is soft-discouraged (not locked out)
-  // from bowling once they're down to their last couple of overs, ahead
+  // A team's top two death specialists are each soft-discouraged (not
+  // locked out) from bowling once they're down to their last over, ahead
   // of the death phase — a real captain leans away from using them up
-  // early, but will still absolutely call on them if runs are leaking or
-  // no one else is a better option. This used to be a hard pool
-  // exclusion, which meant a bowler reaching "2 overs left" at, say,
-  // over 4 was then locked out of the entire rest of the middle overs
-  // (over a dozen overs, in a 20-over innings) — exactly the kind of
-  // unrealistic under-bowling a genuinely elite bowler shouldn't suffer.
+  // too early, but will still absolutely call on them if runs are
+  // leaking or no one else is a better option. Only the last over is
+  // held back (not 2-3), and it applies to two bowlers rather than
+  // just one, so there's a genuine second option at the death if the
+  // first gets smashed or can't bowl due to the no-consecutive-overs
+  // rule — a single reserved bowler isn't much of a plan.
   const pool = eligible;
-  const reservedDeathBowlerHoldback = (reservedDeathBowler && !deathPhase && !capped(reservedDeathBowler)
-    && (generalMax - (oversBowledMap.get(reservedDeathBowler) || 0)) <= 2) ? reservedDeathBowler : null;
+  const reservedDeathBowlersHoldback = (reservedDeathBowlers || []).filter(b =>
+    !deathPhase && !capped(b) && (generalMax - (oversBowledMap.get(b) || 0)) <= 1
+  );
 
   // "Never bowl consecutive overs" is a hard cricket rule, not a soft
   // preference — it's relaxed only if the team genuinely has no other
@@ -473,9 +474,9 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
     // concentrate the extra overs onto one bowler
     const minOvers = Math.min(...candidates.map(b => oversBowledMap.get(b) || 0));
     const leastUsed = candidates.filter(b => (oversBowledMap.get(b) || 0) === minOvers);
-    bowler = pickWeightedBowler(leastUsed, over, totalOvers, lastOverRuns, runsLeaking, reservedDeathBowlerHoldback);
+    bowler = pickWeightedBowler(leastUsed, over, totalOvers, lastOverRuns, runsLeaking, reservedDeathBowlersHoldback);
   } else {
-    bowler = pickWeightedBowler(candidates, over, totalOvers, lastOverRuns, runsLeaking, reservedDeathBowlerHoldback);
+    bowler = pickWeightedBowler(candidates, over, totalOvers, lastOverRuns, runsLeaking, reservedDeathBowlersHoldback);
   }
   if (powerplayUsed) powerplayUsed.add(bowler);
   return { bowler };
@@ -528,15 +529,15 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target, 
   const extrasByType = { wide: 0, noball: 0, bye: 0 };
 
   const { eligible, maxOversPerBowler } = getEligibleBowlers(bowlingTeam, totalOvers);
-  // guarantee at least a couple of overs are genuinely held back for a
-  // strong death bowler, rather than just discouraging their early use
-  // probabilistically — pick the single highest-rated specialist (if any)
-  // and hard-exclude them from non-death overs until only enough overs
-  // remain that they're needed anyway
+  // Guarantee at least the last over or so is genuinely held back for a
+  // strong death option, rather than just discouraging early use
+  // probabilistically. Reserves the TOP TWO highest-rated specialists (not
+  // just one) — with only one bowler reserved, a captain still has just a
+  // single death-over option if that one bowler gets smashed or is
+  // unavailable due to the no-consecutive-overs rule; two genuine death
+  // options is a much more realistic captaincy pattern.
   const deathCandidates = eligible.filter(b => b.bowlingSkill === "Specialist Bowler" || b.bowlingSkill === "Death/Old Ball Bowler");
-  const reservedDeathBowler = deathCandidates.length
-    ? deathCandidates.reduce((best, b) => (b.bowling > best.bowling ? b : best))
-    : null;
+  const reservedDeathBowlers = [...deathCandidates].sort((a, b) => b.bowling - a.bowling).slice(0, 2);
   let ballsBowled = 0;
   const bowlerBallsSelf = new Map();
   const bowlerFullOvers = new Map();
@@ -553,7 +554,7 @@ function simulateInnings({ battingTeam, bowlingTeam, pitch, totalOvers, target, 
     // normal rate for this stage of the innings — a real captain would
     // recognise this and bring a strike bowler back even mid-innings
     const runsLeaking = over >= 3 && (runs / over) >= 9;
-    const choice = fixedBowler ? { bowler: fixedBowler } : chooseBowlerForOver({ eligible, fullTeam: bowlingTeam, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowler, runsLeaking });
+    const choice = fixedBowler ? { bowler: fixedBowler } : chooseBowlerForOver({ eligible, fullTeam: bowlingTeam, oversBowledMap: bowlerFullOvers, over, totalOvers, powerplayUsed, lastOverBowler, lastOverRuns, reservedDeathBowlers, runsLeaking });
     const bowler = choice.bowler;
     const bowlerLog = bowlingLog[bowlingTeam.indexOf(bowler)];
     if (!bowlerBallsSelf.has(bowler)) bowlerBallsSelf.set(bowler, 0);
