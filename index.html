@@ -1478,6 +1478,91 @@ function getGroundByName(name) {
 const STORAGE_KEY = "matchsim_appstate_v1";
 const CURRENT_MATCH_KEY = "matchsim_currentmatch_v1";
 
+/** IndexedDB backing store for match history specifically — the one
+ * field that actually grows large (full ball-by-ball detail per match),
+ * since localStorage's typical 5-10MB quota was getting hit after just
+ * ~100-200 matches, silently failing every save from that point on.
+ * IndexedDB's quota is typically hundreds of MB to GB in the same
+ * browser, still fully local — nothing leaves the device, no account,
+ * no server; it's just a better-suited API for this amount of data.
+ * Everything else (players, teams, seasons, grounds) stays on the
+ * existing fast, synchronous localStorage path — only matches move. */
+const IDB_NAME = "matchsim_db";
+const IDB_STORE = "matches";
+let idbPromise = null;
+function idbOpen() {
+  if (idbPromise) return idbPromise;
+  idbPromise = new Promise((resolve, reject) => {
+    if (!window.indexedDB) { reject(new Error("IndexedDB not available")); return; }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE, { keyPath: "id" }); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  // don't cache a failed open — a transient issue (or, in this dev
+  // environment, indexedDB simply not being wired up yet at the exact
+  // moment of the very first call) shouldn't permanently disable
+  // IndexedDB for the rest of the session; only a successful open is
+  // worth remembering and reusing.
+  idbPromise.catch(() => { idbPromise = null; });
+  return idbPromise;
+}
+async function idbGetAllMatches() {
+  try {
+    const db = await idbOpen();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readonly");
+      const req = tx.objectStore(IDB_STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) {
+    console.warn("Could not read matches from IndexedDB:", e);
+    return null; // null (not []) signals "couldn't read" so callers don't wipe existing data
+  }
+}
+async function idbPutMatch(match) {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).put(match);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.warn("Could not save match to IndexedDB:", e);
+  }
+}
+async function idbDeleteMatches(ids) {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      const store = tx.objectStore(IDB_STORE);
+      ids.forEach(id => store.delete(id));
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.warn("Could not delete matches from IndexedDB:", e);
+  }
+}
+async function idbPutAllMatches(matches) {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      const store = tx.objectStore(IDB_STORE);
+      matches.forEach(m => store.put(m));
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.warn("Could not bulk-save matches to IndexedDB:", e);
+  }
+}
+
 const appState = { players: [], teams: [], matches: [], seasons: [], grounds: [] };
 
 function seedDefaultData() {
@@ -1496,10 +1581,19 @@ function seedDefaultData() {
  * so a page reload (or reopening the installed PWA) picks up right where
  * things were left, matching the pattern Pitchside and Squad Ledger use. */
 function persistState() {
+  // Matches live in IndexedDB now (see recordMatch / the various delete
+  // handlers, which write/delete them there directly) — everything else
+  // is small enough that localStorage's ~5-10MB quota was never really
+  // the problem; it was specifically the full ball-by-ball match detail
+  // that could grow to hundreds of matches worth of data and silently
+  // blow the quota. Excluding matches here removes that pressure at the
+  // source rather than reacting to it after the fact.
+  const { matches, ...appStateWithoutMatches } = appState;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ appState, nextId }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ appState: appStateWithoutMatches, nextId }));
   } catch (e) {
     console.warn("Could not save app state to localStorage:", e);
+    alert("Storage is full and couldn't be saved. Consider using \"Download DB\" to back up your data.");
   }
 }
 
@@ -1514,15 +1608,52 @@ function loadPersistedState() {
     if (!data || !data.appState || !Array.isArray(data.appState.players)) return false;
     appState.players = data.appState.players;
     appState.teams = data.appState.teams || [];
-    appState.matches = data.appState.matches || [];
     appState.seasons = data.appState.seasons || [];
     appState.grounds = data.appState.grounds || [];
+    // matches are hydrated separately from IndexedDB (see
+    // hydrateMatchesFromIndexedDB below) — start empty here so the rest
+    // of the app boots instantly and synchronously as before; matches
+    // fill in moments later, well before anyone could click into Match
+    // History or Records. data.appState.matches, if present, is only
+    // legacy data left over from before this change — passed through
+    // for one-time migration, not used directly.
+    appState.matches = [];
     if (typeof data.nextId === "number") nextId = data.nextId;
+    hydrateMatchesFromIndexedDB(Array.isArray(data.appState.matches) ? data.appState.matches : []);
     return true;
   } catch (e) {
     console.warn("Could not load saved app state:", e);
     return false;
   }
+}
+
+/** Fills in appState.matches from IndexedDB once it resolves (normally
+ * a few milliseconds). If IndexedDB is empty but there's legacy match
+ * data sitting in the old localStorage blob (from before matches moved
+ * to IndexedDB), migrate it over once so it isn't lost, then re-save so
+ * the old copy stops taking up localStorage space going forward. */
+async function hydrateMatchesFromIndexedDB(legacyMatches) {
+  const fromIdb = await idbGetAllMatches();
+  if (fromIdb === null) {
+    // couldn't read IndexedDB at all (unsupported/blocked) — fall back
+    // to whatever legacy matches localStorage already had rather than
+    // losing them
+    appState.matches = legacyMatches;
+    return;
+  }
+  if (fromIdb.length === 0 && legacyMatches.length > 0) {
+    await idbPutAllMatches(legacyMatches);
+    appState.matches = legacyMatches;
+    persistState(); // drop the now-migrated matches out of the localStorage blob
+  } else {
+    appState.matches = fromIdb;
+  }
+  // Match History / Records re-render fresh on every tab switch anyway,
+  // but if the user happens to already be sitting on one of them at the
+  // exact moment hydration finishes, refresh it so it's not stuck empty.
+  const activeTab = document.querySelector(".tab-btn.active")?.dataset.tab;
+  if (activeTab === "stats") renderStatsTab();
+  if (activeTab === "records") renderRecordsTab();
 }
 
 if (!loadPersistedState()) {
@@ -2200,12 +2331,14 @@ function simulateSeasonMatch(match, seasonPitch, totalOvers) {
 }
 
 function recordMatch({ groundName, teamAName, teamBName, teamAColor, teamBColor, result, tournamentId, source, seasonId, seasonMatchId }) {
-  appState.matches.push({
+  const record = {
     id: nextId++, timestamp: Date.now(), groundName,
     teamAName, teamBName, teamAColor, teamBColor, result, tournamentId, source: source || "quickmatch",
     seasonId: seasonId || null, seasonMatchId: seasonMatchId || null,
-  });
-  persistState();
+  };
+  appState.matches.push(record);
+  idbPutMatch(record); // matches live in IndexedDB, not the localStorage blob — see persistState
+  persistState(); // still saves everything else (players/teams/seasons/grounds/nextId)
 }
 
 /** Aggregates batting, bowling, and wicketkeeping stats across a set of
@@ -2324,7 +2457,9 @@ function renderStatsTab() {
   }).join("");
   historyEl.querySelectorAll(".delete-match-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      appState.matches = appState.matches.filter(m => m.id !== Number(btn.dataset.matchId));
+      const matchId = Number(btn.dataset.matchId);
+      appState.matches = appState.matches.filter(m => m.id !== matchId);
+      idbDeleteMatches([matchId]);
       renderStatsTab();
     });
   });
@@ -2765,7 +2900,9 @@ function renderSeasonsAppDetail() {
   body.querySelector(".delete-season-btn").onclick = () => {
     if (!confirm("Delete this season and all its data?")) return;
     const allMatchIds = new Set([...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)].map(m => m.id));
+    const historyIdsToDelete = appState.matches.filter(hm => hm.seasonMatchId && allMatchIds.has(hm.seasonMatchId)).map(hm => hm.id);
     appState.matches = appState.matches.filter(hm => !hm.seasonMatchId || !allMatchIds.has(hm.seasonMatchId));
+    idbDeleteMatches(historyIdsToDelete);
     appState.seasons = appState.seasons.filter(s => s.id !== season.id);
     seasonsAppScreen = "home";
     renderSeasonsApp();
@@ -2934,7 +3071,9 @@ function wireGroupCards(season, pitch, totalOvers) {
       const group = season.groups.find(g => g.id === Number(btn.dataset.groupId));
       const matchId = Number(btn.dataset.matchId);
       group.matches = group.matches.filter(m => m.id !== matchId);
+      const historyMatch = appState.matches.find(hm => hm.seasonMatchId === matchId);
       appState.matches = appState.matches.filter(hm => hm.seasonMatchId !== matchId);
+      if (historyMatch) idbDeleteMatches([historyMatch.id]);
       persistState();
       renderSeasonsAppDetail();
     };
@@ -2956,7 +3095,9 @@ function wireGroupCards(season, pitch, totalOvers) {
       const groupId = Number(btn.dataset.groupId);
       const group = season.groups.find(g => g.id === groupId);
       const matchIds = new Set(group.matches.map(m => m.id));
+      const historyIdsToDelete = appState.matches.filter(hm => hm.seasonMatchId && matchIds.has(hm.seasonMatchId)).map(hm => hm.id);
       appState.matches = appState.matches.filter(hm => !hm.seasonMatchId || !matchIds.has(hm.seasonMatchId));
+      idbDeleteMatches(historyIdsToDelete);
       season.groups = season.groups.filter(g => g.id !== groupId);
       persistState();
       renderSeasonsAppDetail();
@@ -2989,7 +3130,9 @@ function wireKnockoutCards(season, pitch, totalOvers) {
       const round = season.knockoutRounds.find(r => r.id === Number(btn.dataset.roundId));
       const matchId = Number(btn.dataset.matchId);
       round.matches = round.matches.filter(m => m.id !== matchId);
+      const historyMatch = appState.matches.find(hm => hm.seasonMatchId === matchId);
       appState.matches = appState.matches.filter(hm => hm.seasonMatchId !== matchId);
+      if (historyMatch) idbDeleteMatches([historyMatch.id]);
       persistState();
       renderSeasonsAppDetail();
     };
@@ -2999,7 +3142,9 @@ function wireKnockoutCards(season, pitch, totalOvers) {
       const roundId = Number(btn.dataset.roundId);
       const round = season.knockoutRounds.find(r => r.id === roundId);
       const matchIds = new Set(round.matches.map(m => m.id));
+      const historyIdsToDelete = appState.matches.filter(hm => hm.seasonMatchId && matchIds.has(hm.seasonMatchId)).map(hm => hm.id);
       appState.matches = appState.matches.filter(hm => !hm.seasonMatchId || !matchIds.has(hm.seasonMatchId));
+      idbDeleteMatches(historyIdsToDelete);
       season.knockoutRounds = season.knockoutRounds.filter(r => r.id !== roundId);
       persistState();
       renderSeasonsAppDetail();
@@ -3144,6 +3289,13 @@ function playBackMatch(result, teamColors, opts) {
       }
     }
     if (ballIdx >= inn.timeline.length) {
+      // the just-finished innings' live score was still showing the
+      // "before the last ball" position (19.5, say) since nothing ever
+      // updated it once that final ball actually resolved — show the
+      // real final total, using the innings' own authoritative overs
+      // count, before moving on
+      const lastBall = inn.timeline[inn.timeline.length - 1];
+      if (lastBall) liveScore.textContent = `${lastBall.score}/${lastBall.wickets} (${formatOvers(inn.totalOvers)})`;
       inningsIdx++;
       ballIdx = 0;
       if (inningsIdx >= innings.length) {
