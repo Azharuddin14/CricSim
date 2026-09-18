@@ -631,7 +631,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-18 · team profile contrast fix, split groups/knockouts</p>
+  <p class="app-version-tag">Build 2026-09-18 · closed a rare over-cap edge case</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -1182,15 +1182,25 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
   const remainingOversAfterThis = totalOvers - over;
   function feasibleAfterPicking(candidate) {
     if (remainingOversAfterThis <= 0) return true;
-    let maxRemaining = 0, totalRemaining = 0;
+    let maxRemaining = 0, totalRemaining = 0, otherRemaining = 0;
     for (const b of eligible) {
       const used = (oversBowledMap.get(b) || 0) + (b === candidate ? 1 : 0);
       const remaining = Math.max(0, capFor(b) - used);
       totalRemaining += remaining;
       if (remaining > maxRemaining) maxRemaining = remaining;
+      if (b !== candidate) otherRemaining += remaining;
     }
     if (totalRemaining < remainingOversAfterThis) return false;
     if (maxRemaining > Math.ceil(remainingOversAfterThis / 2)) return false;
+    // the very next over specifically excludes `candidate` (no consecutive
+    // overs) — someone ELSE must have capacity left for it, or the very
+    // next slot has zero legal options regardless of what the aggregate
+    // totals above say. This is the gap that let a bowler who'd been
+    // legitimately held back (e.g. reserved for the death) end up as the
+    // sole bowler with an over left, get picked for the second-to-last
+    // over, and then have nobody legally available for the last one —
+    // forcing the cap to bend on whoever got picked instead.
+    if (otherRemaining < 1) return false;
     return true;
   }
 
