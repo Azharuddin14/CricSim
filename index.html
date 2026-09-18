@@ -278,7 +278,7 @@
   .team-selector-pill.active { background: rgba(27,67,50,0.55); border-color: var(--pitch-light); color: var(--cream); box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
   .team-selector-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 2px rgba(255,255,255,0.08); }
   .team-leaderboard-row {
-    display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.04);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; background: rgba(255,255,255,0.04);
     border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 6px;
     transition: border-color 0.15s;
   }
@@ -288,6 +288,10 @@
     font-weight: 600; color: var(--cream); cursor: pointer; flex: 1; min-width: 0;
   }
   .team-leaderboard-name span.tname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .roster-incomplete-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #E63946; flex-shrink: 0;
+    box-shadow: 0 0 0 2px rgba(230,57,70,0.25);
+  }
   .team-leaderboard-stats {
     display: grid; grid-template-columns: repeat(4, auto); gap: 8px; font-family: 'JetBrains Mono', monospace;
     font-size: 11px; color: var(--cream-dim); cursor: pointer; flex-shrink: 0;
@@ -627,7 +631,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-18 · team leaderboard &amp; cross-season Team Profile</p>
+  <p class="app-version-tag">Build 2026-09-18 · team profile contrast fix, split groups/knockouts</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -2369,26 +2373,26 @@ function renderTeamProfile(teamId) {
     });
     const stage = getStageReachedInSeason(season, teamId);
     return `<div class="ps-record-line team-history-line">
-      <b>${season.name}</b> <span class="hint-text">W${w} L${l}${t ? ` T${t}` : ""} — ${stage ? stage.label : "Group stage"}</span>
+      <b>${season.name}</b> <span class="ps-dim">W${w} L${l}${t ? ` T${t}` : ""} — ${stage ? stage.label : "Group stage"}</span>
     </div>`;
   }).filter(Boolean);
 
   const h2hRows = Object.values(overall.headToHead).sort((a, b) => b.played - a.played).map(h =>
-    `<div class="ps-record-line"><b>${getTeam(h.oppId)?.name || "Unknown"}</b> <span class="hint-text">W${h.won} L${h.lost}${h.tied ? ` T${h.tied}` : ""} (${h.played} played)</span></div>`
-  ).join("") || `<p class="hint-text">No matches recorded yet.</p>`;
+    `<div class="ps-record-line"><b>${getTeam(h.oppId)?.name || "Unknown"}</b> <span class="ps-dim">W${h.won} L${h.lost}${h.tied ? ` T${h.tied}` : ""} (${h.played} played)</span></div>`
+  ).join("") || `<p class="ps-empty">No matches recorded yet.</p>`;
   const koH2hRows = Object.values(koH2H.headToHead).sort((a, b) => b.played - a.played).map(h =>
-    `<div class="ps-record-line"><b>${getTeam(h.oppId)?.name || "Unknown"}</b> <span class="hint-text">W${h.won} L${h.lost}${h.tied ? ` T${h.tied}` : ""} (${h.played} played)</span></div>`
-  ).join("") || `<p class="hint-text">No knockout matches recorded yet.</p>`;
+    `<div class="ps-record-line"><b>${getTeam(h.oppId)?.name || "Unknown"}</b> <span class="ps-dim">W${h.won} L${h.lost}${h.tied ? ` T${h.tied}` : ""} (${h.played} played)</span></div>`
+  ).join("") || `<p class="ps-empty">No knockout matches recorded yet.</p>`;
 
   const startingXI = teamPlayers(team);
   const startingXIHtml = startingXI.length
-    ? startingXI.map((p, i) => `<div class="ps-record-line"><span class="hint-text">${i + 1}.</span> ${p.name}${p.isWicketKeeper ? " (WK)" : ""}</div>`).join("")
-    : `<p class="hint-text">No players assigned yet.</p>`;
+    ? startingXI.map((p, i) => `<div class="ps-record-line"><span class="ps-dim">${i + 1}.</span> ${p.name}${p.isWicketKeeper ? " (WK)" : ""}</div>`).join("")
+    : `<p class="ps-empty">No players assigned yet.</p>`;
 
   const allPlayers = allTimePlayersForTeam(teamId);
   const allPlayersHtml = allPlayers.length
-    ? `<p class="hint-text" style="line-height:1.6;">${allPlayers.join(" · ")}</p>`
-    : `<p class="hint-text">No recorded appearances yet.</p>`;
+    ? `<p class="ps-record-line" style="line-height:1.6;">${allPlayers.join(" · ")}</p>`
+    : `<p class="ps-empty">No recorded appearances yet.</p>`;
 
   const content = document.getElementById("teamProfileContent");
   content.innerHTML = `
@@ -2415,7 +2419,7 @@ function renderTeamProfile(teamId) {
     </div>
     <div class="ps-card">
       <div class="ps-card-title">Season-wise performance</div>
-      ${seasonRows.join("") || `<p class="hint-text">This team hasn't played in any saved season yet.</p>`}
+      ${seasonRows.join("") || `<p class="ps-empty">This team hasn't played in any saved season yet.</p>`}
     </div>
     <div class="ps-card">
       <div class="ps-card-title">Current starting XI</div>
@@ -2448,7 +2452,8 @@ function renderTeamsTab() {
         <div class="team-leaderboard-row ${t.id === currentTeamView ? "active" : ""}" data-team-id="${t.id}">
           <div class="team-leaderboard-name" data-role="edit" data-team-id="${t.id}">
             <span class="team-selector-dot" style="background:${t.color || "#457B9D"};"></span>
-            <span class="tname">${t.name}</span> <span class="hint-text">(${t.playerIds.length}/11)</span>
+            <span class="tname">${t.name}</span>
+            ${t.playerIds.length !== 11 ? `<span class="roster-incomplete-dot" title="Starting XI incomplete (${t.playerIds.length}/11)"></span>` : ""}
           </div>
           <div class="team-leaderboard-stats" data-role="view-profile" data-team-id="${t.id}">
             <span title="Championships">${sc.championships > 0 ? `🏆${sc.championships}` : ""}</span>
@@ -3255,7 +3260,7 @@ function renderRecordsTab() {
 // ============================================================
 let seasonsAppScreen = "home"; // "home" | "detail"
 let seasonsAppActiveSeasonId = null;
-let seasonsDetailTab = "matches"; // "matches" | "stats"
+let seasonsDetailTab = "groups"; // "groups" | "knockouts" | "stats"
 let seasonsStatsTeamId = null; // which team's filtered records to show in the Stats tab
 
 function getSeason(id) { return appState.seasons.find(s => s.id === id); }
@@ -3324,7 +3329,7 @@ function renderSeasonsAppHome() {
     btn.addEventListener("click", () => {
       seasonsAppActiveSeasonId = Number(btn.dataset.seasonId);
       seasonsAppScreen = "detail";
-      seasonsDetailTab = "matches";
+      seasonsDetailTab = "groups";
       renderSeasonsApp();
     });
   });
@@ -3337,7 +3342,7 @@ function renderSeasonsAppHome() {
     appState.seasons.push(season);
     seasonsAppActiveSeasonId = season.id;
     seasonsAppScreen = "detail";
-    seasonsDetailTab = "matches";
+    seasonsDetailTab = "groups";
     renderSeasonsApp();
   };
 }
@@ -3421,22 +3426,29 @@ function renderSeasonsAppDetail() {
 
   const subtabHtml = `
     <div class="ps-subtab-row">
-      <button class="ps-subtab-btn ${seasonsDetailTab === "matches" ? "active" : ""}" data-subtab="matches">Matches</button>
+      <button class="ps-subtab-btn ${seasonsDetailTab === "groups" ? "active" : ""}" data-subtab="groups">Groups</button>
+      <button class="ps-subtab-btn ${seasonsDetailTab === "knockouts" ? "active" : ""}" data-subtab="knockouts">Knockouts</button>
       <button class="ps-subtab-btn ${seasonsDetailTab === "stats" ? "active" : ""}" data-subtab="stats">Stats</button>
     </div>`;
 
   let contentHtml;
-  if (seasonsDetailTab === "matches") {
+  if (seasonsDetailTab === "groups") {
     const groupsHtml = season.groups.map(g => renderGroupCard(season, g, pitch, totalOvers)).join("");
-    const roundsHtml = season.knockoutRounds.map(r => renderKnockoutRoundCard(season, r, pitch, totalOvers)).join("");
     contentHtml = `
       <div class="ps-card-header-row" style="margin-bottom:12px;">
         <button class="ps-ghost-btn" id="addGroupBtn">+ Add group</button>
-        <button class="ps-ghost-btn" id="addRoundBtn">+ Add knockout round</button>
       </div>
       ${groupsHtml}
+      ${season.groups.length === 0 ? '<p class="ps-empty" style="color:rgba(245,239,220,0.5);">No groups yet — add one above.</p>' : ""}
+    `;
+  } else if (seasonsDetailTab === "knockouts") {
+    const roundsHtml = season.knockoutRounds.map(r => renderKnockoutRoundCard(season, r, pitch, totalOvers)).join("");
+    contentHtml = `
+      <div class="ps-card-header-row" style="margin-bottom:12px;">
+        <button class="ps-ghost-btn" id="addRoundBtn">+ Add knockout round</button>
+      </div>
       ${roundsHtml}
-      ${season.groups.length === 0 && season.knockoutRounds.length === 0 ? '<p class="ps-empty" style="color:rgba(245,239,220,0.5);">No groups or knockout rounds yet — add one above.</p>' : ""}
+      ${season.knockoutRounds.length === 0 ? '<p class="ps-empty" style="color:rgba(245,239,220,0.5);">No knockout rounds yet — add one above.</p>' : ""}
     `;
   } else {
     const seasonRecords = seasonPlayedMatchRecords(season);
@@ -3679,8 +3691,11 @@ function renderSeasonsAppDetail() {
     btn.onclick = () => { seasonsDetailTab = btn.dataset.subtab; renderSeasonsAppDetail(); };
   });
 
-  if (seasonsDetailTab === "matches") {
+  if (seasonsDetailTab === "groups") {
     document.getElementById("addGroupBtn").onclick = () => openAddGroupModal(season);
+    wireGroupCards(season, pitch, totalOvers);
+    wireScorecardButtons();
+  } else if (seasonsDetailTab === "knockouts") {
     document.getElementById("addRoundBtn").onclick = () => {
       const name = prompt("Round name?", season.knockoutRounds.length === 0 ? "Semi Final" : "Final");
       if (!name) return;
@@ -3688,7 +3703,6 @@ function renderSeasonsAppDetail() {
       persistState();
       renderSeasonsAppDetail();
     };
-    wireGroupCards(season, pitch, totalOvers);
     wireKnockoutCards(season, pitch, totalOvers);
     wireScorecardButtons();
   } else {
