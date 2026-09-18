@@ -369,7 +369,7 @@
   /* These two modals can be opened from *inside* the Seasons overlay
      (z-index: 100), so they need to sit above it — otherwise they open
      correctly but render completely hidden behind it. */
-  #seasonLiveOverlay, #seasonScorecardOverlay, #addGroupOverlay, #editSeasonOverlay { z-index: 110; }
+  #seasonLiveOverlay, #seasonScorecardOverlay, #addGroupOverlay, #editSeasonOverlay, #matchSummaryOverlay, #teamProfileOverlay { z-index: 110; }
   .seasons-app-overlay.open { display: flex; }
   .ps-header {
     background: #1B4332; border-bottom: 4px solid #E8A33D; padding: 18px 20px;
@@ -579,7 +579,8 @@
   .tv-summary-mom { text-align: center; font-family: 'Inter', sans-serif; font-size: 12px; color: var(--cream-dim); margin-top: 6px; }
 
   /* Landscape "broadcast graphic" layout — export-only, never shown in
-     the UI. Fixed 1200x675 (16:9) so nothing wraps or truncates. */
+     the UI. Fixed 1200px wide, height grows to fit two full-width
+     innings rows stacked top/bottom rather than split left/right. */
   .tvl-canvas {
     width: 1200px; min-height: 675px; box-sizing: border-box; padding: 40px 56px;
     background: linear-gradient(135deg, #0F2C22 0%, #16362A 100%);
@@ -590,16 +591,19 @@
     text-align: center; font-size: 18px; color: rgba(245,239,220,0.7);
     padding-bottom: 18px; margin-bottom: 24px; border-bottom: 1px dashed rgba(245,239,220,0.25);
   }
-  .tvl-body { display: flex; flex: 1; gap: 0; }
-  .tvl-column { flex: 1; padding: 0 32px; display: flex; flex-direction: column; }
-  .tvl-divider { width: 1px; background: rgba(245,239,220,0.2); margin: 0 8px; }
+  .tvl-body { display: flex; flex-direction: column; flex: 1; gap: 0; }
+  .tvl-row { display: flex; align-items: flex-start; gap: 40px; padding: 20px 0; }
+  .tvl-row-left { flex: 0 0 280px; }
+  .tvl-row-right { flex: 1; display: flex; gap: 40px; }
+  .tvl-subcol { flex: 1; }
+  .tvl-divider { height: 1px; background: rgba(245,239,220,0.2); margin: 4px 0; }
   .tvl-team-header { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
   .tvl-team-dot { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 3px rgba(255,255,255,0.1); }
-  .tvl-team-name { font-family: 'Oswald', sans-serif; font-size: 26px; letter-spacing: 0.01em; }
-  .tvl-score { font-family: 'Oswald', sans-serif; font-size: 56px; font-weight: 600; color: #E9B44C; line-height: 1; margin: 4px 0 22px; }
+  .tvl-team-name { font-family: 'Oswald', sans-serif; font-size: 24px; letter-spacing: 0.01em; }
+  .tvl-score { font-family: 'Oswald', sans-serif; font-size: 48px; font-weight: 600; color: #E9B44C; line-height: 1; margin-top: 6px; }
   .tvl-section-title {
     font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
-    color: rgba(245,239,220,0.55); margin: 14px 0 8px;
+    color: rgba(245,239,220,0.55); margin: 0 0 8px;
   }
   .tvl-vs { text-transform: none; font-weight: 400; letter-spacing: 0; }
   .tvl-line {
@@ -701,7 +705,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-18 · summary polish, ball-by-ball now starts at 0.1</p>
+  <p class="app-version-tag">Build 2026-09-18 · fixed summary modal on Seasons, landscape now top/bottom</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -4453,7 +4457,7 @@ function renderMatchSummaryLandscape(result, colors) {
   const c = colors || { firstTeamColor: "#E63946", secondTeamColor: "#1D3557" };
   const tossLine = `${result.toss.tossWinnerName} won the toss and chose to ${result.toss.decision === "bat" ? "bat" : "bowl"} first.`;
 
-  const inningsColumn = (teamName, teamColor, oppName, innings) => {
+  const inningsRow = (teamName, teamColor, oppName, innings) => {
     const batters = topBatters(innings.battingLog, 3).map(b =>
       `<div class="tvl-line"><span class="tvl-line-name">${b.name}</span><span class="tvl-line-stat">${b.runs}${b.out ? "" : "*"} (${b.balls})</span></div>`
     ).join("") || `<p class="tvl-empty">No batters yet.</p>`;
@@ -4461,16 +4465,24 @@ function renderMatchSummaryLandscape(result, colors) {
       `<div class="tvl-line"><span class="tvl-line-name">${b.name}</span><span class="tvl-line-stat">${b.wickets}/${b.runs}</span></div>`
     ).join("") || `<p class="tvl-empty">No bowlers yet.</p>`;
     return `
-      <div class="tvl-column">
-        <div class="tvl-team-header">
-          <span class="tvl-team-dot" style="background:${teamColor};"></span>
-          <span class="tvl-team-name">${teamName}</span>
+      <div class="tvl-row">
+        <div class="tvl-row-left">
+          <div class="tvl-team-header">
+            <span class="tvl-team-dot" style="background:${teamColor};"></span>
+            <span class="tvl-team-name">${teamName}</span>
+          </div>
+          <div class="tvl-score">${innings.scoreText}</div>
         </div>
-        <div class="tvl-score">${innings.scoreText}</div>
-        <div class="tvl-section-title">Top Batters</div>
-        ${batters}
-        <div class="tvl-section-title">Top Bowlers <span class="tvl-vs">(${oppName})</span></div>
-        ${bowlers}
+        <div class="tvl-row-right">
+          <div class="tvl-subcol">
+            <div class="tvl-section-title">Top Batters</div>
+            ${batters}
+          </div>
+          <div class="tvl-subcol">
+            <div class="tvl-section-title">Top Bowlers <span class="tvl-vs">(${oppName})</span></div>
+            ${bowlers}
+          </div>
+        </div>
       </div>`;
   };
 
@@ -4481,9 +4493,9 @@ function renderMatchSummaryLandscape(result, colors) {
     <div class="tvl-canvas">
       <div class="tvl-toss">${tossLine}</div>
       <div class="tvl-body">
-        ${inningsColumn(result.firstTeamName, c.firstTeamColor, result.secondTeamName, result.first)}
+        ${inningsRow(result.firstTeamName, c.firstTeamColor, result.secondTeamName, result.first)}
         <div class="tvl-divider"></div>
-        ${inningsColumn(result.secondTeamName, c.secondTeamColor, result.firstTeamName, result.second)}
+        ${inningsRow(result.secondTeamName, c.secondTeamColor, result.firstTeamName, result.second)}
       </div>
       <div class="tvl-result">${getSummaryResultText(result)}</div>
       ${momLine}
