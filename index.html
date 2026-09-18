@@ -46,6 +46,10 @@
     background: linear-gradient(180deg, rgba(63,107,63,0.18), transparent);
     box-shadow: 0 2px 12px rgba(0,0,0,0.25);
   }
+  .app-version-tag {
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--amber);
+    opacity: 0.75; margin: 2px 0 10px; letter-spacing: 0.02em;
+  }
   header h1 {
     font-family: 'Oswald', sans-serif;
     font-weight: 700;
@@ -273,6 +277,22 @@
   .team-selector-pill:hover { border-color: rgba(45,106,79,0.6); color: var(--cream); }
   .team-selector-pill.active { background: rgba(27,67,50,0.55); border-color: var(--pitch-light); color: var(--cream); box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
   .team-selector-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 2px rgba(255,255,255,0.08); }
+  .team-leaderboard-row {
+    display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 6px;
+    transition: border-color 0.15s;
+  }
+  .team-leaderboard-row.active { border-color: var(--pitch-light); background: rgba(27,67,50,0.35); }
+  .team-leaderboard-name {
+    display: flex; align-items: center; gap: 8px; font-family: 'Inter', sans-serif; font-size: 13px;
+    font-weight: 600; color: var(--cream); cursor: pointer; flex: 1; min-width: 0;
+  }
+  .team-leaderboard-name span.tname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .team-leaderboard-stats {
+    display: grid; grid-template-columns: repeat(4, auto); gap: 8px; font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--cream-dim); cursor: pointer; flex-shrink: 0;
+  }
+  .team-leaderboard-stats span { min-width: 26px; text-align: right; }
 
   /* Pitchside-style light cream cards — used throughout the Seasons tab.
      Deliberately a different surface treatment from the rest of the dark
@@ -607,6 +627,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
+  <p class="app-version-tag">Build 2026-09-18 · team leaderboard &amp; cross-season Team Profile</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -691,6 +712,15 @@
       <div id="seasonScorecardContent"></div>
       <div class="modal-actions" style="margin-top:14px;">
         <button type="button" class="btn-ghost" id="closeSeasonScorecardBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="teamProfileOverlay" class="modal-overlay">
+    <div class="modal-box" style="max-width:640px; max-height:85vh; overflow-y:auto;">
+      <div id="teamProfileContent"></div>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button type="button" class="btn-ghost" id="closeTeamProfileBtn">Close</button>
       </div>
     </div>
   </div>
@@ -2316,6 +2346,88 @@ document.getElementById("addTeamBtn").addEventListener("click", () => {
 
 let currentTeamView = null; // id of the team currently shown in the builder
 
+/** Full cross-season profile for one team: overall record, trophy
+ * cabinet, head-to-head (overall and knockouts-only), a season-by-season
+ * list, the current starting 11 (view-only — editing happens from the
+ * team's own card, not here), and every player who's ever appeared for
+ * this team in a recorded match. */
+function renderTeamProfile(teamId) {
+  const team = getTeam(teamId);
+  if (!team) return;
+  const overall = getOverallRecord(teamId, false);
+  const koH2H = getOverallRecord(teamId, true);
+  const breakdown = getStageBreakdown(teamId);
+  const seasonRows = appState.seasons.map(season => {
+    const inSeason = season.groups.some(g => g.teamIds.includes(teamId)) || season.knockoutRounds.some(r => r.matches.some(m => m.team1Id === teamId || m.team2Id === teamId));
+    if (!inSeason) return null;
+    const matches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)].filter(m => m.team1Id === teamId || m.team2Id === teamId);
+    let w = 0, l = 0, t = 0;
+    matches.forEach(m => {
+      if (!isPlayed(m)) return;
+      const winnerId = getWinnerId(m);
+      if (!winnerId) t++; else if (winnerId === teamId) w++; else l++;
+    });
+    const stage = getStageReachedInSeason(season, teamId);
+    return `<div class="ps-record-line team-history-line">
+      <b>${season.name}</b> <span class="hint-text">W${w} L${l}${t ? ` T${t}` : ""} — ${stage ? stage.label : "Group stage"}</span>
+    </div>`;
+  }).filter(Boolean);
+
+  const h2hRows = Object.values(overall.headToHead).sort((a, b) => b.played - a.played).map(h =>
+    `<div class="ps-record-line"><b>${getTeam(h.oppId)?.name || "Unknown"}</b> <span class="hint-text">W${h.won} L${h.lost}${h.tied ? ` T${h.tied}` : ""} (${h.played} played)</span></div>`
+  ).join("") || `<p class="hint-text">No matches recorded yet.</p>`;
+  const koH2hRows = Object.values(koH2H.headToHead).sort((a, b) => b.played - a.played).map(h =>
+    `<div class="ps-record-line"><b>${getTeam(h.oppId)?.name || "Unknown"}</b> <span class="hint-text">W${h.won} L${h.lost}${h.tied ? ` T${h.tied}` : ""} (${h.played} played)</span></div>`
+  ).join("") || `<p class="hint-text">No knockout matches recorded yet.</p>`;
+
+  const startingXI = teamPlayers(team);
+  const startingXIHtml = startingXI.length
+    ? startingXI.map((p, i) => `<div class="ps-record-line"><span class="hint-text">${i + 1}.</span> ${p.name}${p.isWicketKeeper ? " (WK)" : ""}</div>`).join("")
+    : `<p class="hint-text">No players assigned yet.</p>`;
+
+  const allPlayers = allTimePlayersForTeam(teamId);
+  const allPlayersHtml = allPlayers.length
+    ? `<p class="hint-text" style="line-height:1.6;">${allPlayers.join(" · ")}</p>`
+    : `<p class="hint-text">No recorded appearances yet.</p>`;
+
+  const content = document.getElementById("teamProfileContent");
+  content.innerHTML = `
+    <div class="team-card-header" style="margin-bottom:10px;">
+      <span class="team-selector-dot" style="background:${team.color || "#457B9D"};"></span>
+      <h2 style="margin:0;">${team.name}</h2>
+    </div>
+    <div class="ps-card">
+      <div class="ps-card-title">Overall record · all seasons</div>
+      <div class="ps-record-line">Played ${overall.played} · Won ${overall.won} · Lost ${overall.lost}${overall.tied ? ` · Tied ${overall.tied}` : ""}</div>
+      <div class="ps-record-line">🏆 Championships — ${breakdown.championships}</div>
+      <div class="ps-record-line">🥈 Runner-ups — ${breakdown.runnerUps}</div>
+      <div class="ps-record-line">🥉 Semis — ${breakdown.semis}</div>
+      <div class="ps-record-line">Quarterfinals — ${breakdown.quarterFinals}</div>
+      <div class="ps-record-line">Group Stage — ${breakdown.groupStage}</div>
+    </div>
+    <div class="ps-card">
+      <div class="ps-card-title">Head-to-head · Overall</div>
+      ${h2hRows}
+    </div>
+    <div class="ps-card">
+      <div class="ps-card-title">Head-to-head · Knockouts only</div>
+      ${koH2hRows}
+    </div>
+    <div class="ps-card">
+      <div class="ps-card-title">Season-wise performance</div>
+      ${seasonRows.join("") || `<p class="hint-text">This team hasn't played in any saved season yet.</p>`}
+    </div>
+    <div class="ps-card">
+      <div class="ps-card-title">Current starting XI</div>
+      ${startingXIHtml}
+    </div>
+    <div class="ps-card">
+      <div class="ps-card-title">Players who've played for ${team.name}</div>
+      ${allPlayersHtml}
+    </div>`;
+  document.getElementById("teamProfileOverlay").style.display = "flex";
+}
+
 function renderTeamsTab() {
   persistState();
   const container = document.getElementById("teamsList");
@@ -2325,13 +2437,27 @@ function renderTeamsTab() {
   }
   if (currentTeamView == null || !getTeam(currentTeamView)) currentTeamView = appState.teams[0].id;
 
+  const rankedTeams = rankTeamsByAchievement(appState.teams);
   const selectorHtml = `
-    <div class="team-selector-row">
-      ${appState.teams.map(t => `
-        <button class="team-selector-pill ${t.id === currentTeamView ? "active" : ""}" data-team-id="${t.id}">
-          <span class="team-selector-dot" style="background:${t.color || "#457B9D"};"></span>
-          ${t.name} <span class="hint-text">(${t.playerIds.length}/11)</span>
-        </button>`).join("")}
+    <div class="team-leaderboard">
+      ${rankedTeams.map(t => {
+        const sc = getStageBreakdown(t.id);
+        const ov = getOverallRecord(t.id, false);
+        const winPct = ov.played > 0 ? Math.round((ov.won / ov.played) * 100) : null;
+        return `
+        <div class="team-leaderboard-row ${t.id === currentTeamView ? "active" : ""}" data-team-id="${t.id}">
+          <div class="team-leaderboard-name" data-role="edit" data-team-id="${t.id}">
+            <span class="team-selector-dot" style="background:${t.color || "#457B9D"};"></span>
+            <span class="tname">${t.name}</span> <span class="hint-text">(${t.playerIds.length}/11)</span>
+          </div>
+          <div class="team-leaderboard-stats" data-role="view-profile" data-team-id="${t.id}">
+            <span title="Championships">${sc.championships > 0 ? `🏆${sc.championships}` : ""}</span>
+            <span title="Runner-ups">${sc.runnerUps > 0 ? `🥈${sc.runnerUps}` : ""}</span>
+            <span title="Semis">${sc.semis > 0 ? `🥉${sc.semis}` : ""}</span>
+            <span title="Win %">${winPct !== null ? `${winPct}%` : ""}</span>
+          </div>
+        </div>`;
+      }).join("")}
     </div>`;
 
   const team = getTeam(currentTeamView);
@@ -2372,8 +2498,11 @@ function renderTeamsTab() {
   container.innerHTML = selectorHtml + builderHtml;
   renderAvailablePlayersList(team);
 
-  container.querySelectorAll(".team-selector-pill").forEach(btn => {
-    btn.addEventListener("click", () => { currentTeamView = Number(btn.dataset.teamId); renderTeamsTab(); });
+  container.querySelectorAll('[data-role="edit"]').forEach(el => {
+    el.addEventListener("click", () => { currentTeamView = Number(el.dataset.teamId); renderTeamsTab(); });
+  });
+  container.querySelectorAll('[data-role="view-profile"]').forEach(el => {
+    el.addEventListener("click", () => renderTeamProfile(Number(el.dataset.teamId)));
   });
   container.querySelector('[data-role="teamcolor"]').addEventListener("input", (e) => { team.color = e.target.value; });
   container.querySelector('[data-role="teamname"]').addEventListener("input", (e) => { team.name = e.target.value; });
@@ -2574,6 +2703,118 @@ function computeStandings(teamIds, matches, matchOvers) {
   rows.sort((a, b) => b.points - a.points || b.nrr - a.nrr);
   return rows;
 }
+
+/** Every match across every saved season that a given team appears in
+ * (any group or knockout round), oldest first within each season. */
+function allMatchesForTeamAcrossSeasons(teamId) {
+  const out = [];
+  appState.seasons.forEach(season => {
+    [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)]
+      .filter(m => m.team1Id === teamId || m.team2Id === teamId)
+      .forEach(m => out.push({ match: m, season }));
+  });
+  return out;
+}
+
+/** Career Played/Won/Lost/Tied and head-to-head against every opponent
+ * faced, across every saved season — the cross-season equivalent of
+ * computeStandings, but for one team against the whole field. */
+function getOverallRecord(teamId, knockoutsOnly) {
+  const rec = { played: 0, won: 0, lost: 0, tied: 0, headToHead: {} };
+  allMatchesForTeamAcrossSeasons(teamId).forEach(({ match: m, season }) => {
+    if (knockoutsOnly && !season.knockoutRounds.some(r => r.matches.includes(m))) return;
+    if (!isPlayed(m)) return;
+    const oppId = m.team1Id === teamId ? m.team2Id : m.team1Id;
+    if (!rec.headToHead[oppId]) rec.headToHead[oppId] = { oppId, played: 0, won: 0, lost: 0, tied: 0 };
+    const h = rec.headToHead[oppId];
+    rec.played++; h.played++;
+    const winnerId = getWinnerId(m);
+    if (!winnerId) { rec.tied++; h.tied++; }
+    else if (winnerId === teamId) { rec.won++; h.won++; }
+    else { rec.lost++; h.lost++; }
+  });
+  return rec;
+}
+
+/** The furthest knockout stage a team reached in one season — rounds are
+ * plain and user-named, in array order, so no bracket math is needed:
+ * the last round is always the Final, the one before it the Semis. */
+function getStageReachedInSeason(season, teamId) {
+  const rounds = season.knockoutRounds;
+  for (let i = rounds.length - 1; i >= 0; i--) {
+    const round = rounds[i];
+    const match = round.matches.find(m => m.team1Id === teamId || m.team2Id === teamId);
+    if (!match) continue;
+    const isFinal = i === rounds.length - 1;
+    if (!isPlayed(match)) return { stage: "in-progress", label: `In ${round.name}` };
+    const winnerId = getWinnerId(match);
+    if (!winnerId) return { stage: "tied", label: `In ${round.name} (tied)` };
+    if (winnerId === teamId) return isFinal ? { stage: "champion", label: "Champion" } : { stage: "advanced", label: `Reached ${round.name}` };
+    if (isFinal) return { stage: "runnerup", label: "Runner-up" };
+    if (i === rounds.length - 2) return { stage: "semis", label: `Lost in ${round.name}` };
+    return { stage: "quarters", label: `Lost in ${round.name}` };
+  }
+  const inGroup = season.groups.some(g => g.teamIds.includes(teamId));
+  return inGroup ? { stage: "group", label: "Group stage" } : null;
+}
+
+/** Career totals of how far a team has gone, bucketed across every saved
+ * season — the basis for both the leaderboard ranking and the team
+ * profile's trophy cabinet. */
+function getStageBreakdown(teamId) {
+  const b = { championships: 0, runnerUps: 0, semis: 0, quarterFinals: 0, groupStage: 0 };
+  appState.seasons.forEach(season => {
+    const s = getStageReachedInSeason(season, teamId);
+    if (!s) return;
+    if (s.stage === "champion") b.championships++;
+    else if (s.stage === "runnerup") b.runnerUps++;
+    else if (s.stage === "semis") b.semis++;
+    else if (s.stage === "quarters") b.quarterFinals++;
+    else if (s.stage === "group") b.groupStage++;
+  });
+  return b;
+}
+
+/** Ranks every team by trophy cabinet first, win% second: championships,
+ * then runner-ups, then semis, then quarterfinals, then group-stage
+ * appearances, then win%, then matches played — matching how a real
+ * all-time table would be read. */
+function rankTeamsByAchievement(teams) {
+  return [...teams].sort((a, b) => {
+    const sa = getStageBreakdown(a.id), sb = getStageBreakdown(b.id);
+    const oa = getOverallRecord(a.id), ob = getOverallRecord(b.id);
+    const winPctA = oa.played > 0 ? oa.won / oa.played : -1;
+    const winPctB = ob.played > 0 ? ob.won / ob.played : -1;
+    return sb.championships - sa.championships || sb.runnerUps - sa.runnerUps || sb.semis - sa.semis
+      || sb.quarterFinals - sa.quarterFinals || sb.groupStage - sa.groupStage
+      || winPctB - winPctA || ob.played - oa.played;
+  });
+}
+
+/** Every player who has ever appeared in a batting or bowling log for
+ * this team, across every saved match (seasons and Friendlies alike) —
+ * the roster as it actually played, not just whoever is on the team
+ * right now. Falls back to the current roster if the team has no
+ * recorded matches yet. */
+function allTimePlayersForTeam(teamId) {
+  const team = getTeam(teamId);
+  const names = new Set();
+  appState.matches.forEach(m => {
+    const isFirst = m.result.firstTeamName === team?.name;
+    const isSecond = m.result.secondTeamName === team?.name;
+    if (!isFirst && !isSecond) return;
+    // this team's batting log is straightforward (their own innings);
+    // their bowling log is stored on the OTHER innings object, since
+    // each innings object holds bowling stats for whoever bowled AT it
+    const ownBattingLog = isFirst ? m.result.first.battingLog : m.result.second.battingLog;
+    const ownBowlingLog = isFirst ? m.result.second.bowlingLog : m.result.first.bowlingLog;
+    ownBattingLog.forEach(p => names.add(p.name));
+    ownBowlingLog.forEach(p => names.add(p.name));
+  });
+  if (names.size === 0) return teamPlayers(team).map(p => p.name);
+  return [...names].sort();
+}
+
 /** Adds one round-robin fixture per new pair of teams — never duplicates a
  * pairing that already has a match in this group. Each fixture gets a
  * random venue from the season's selected grounds, matching how a real
@@ -3473,6 +3714,9 @@ function wireScorecardButtons() {
 document.getElementById("closeSeasonScorecardBtn").addEventListener("click", () => {
   document.getElementById("seasonScorecardOverlay").style.display = "none";
 });
+document.getElementById("closeTeamProfileBtn").addEventListener("click", () => {
+  document.getElementById("teamProfileOverlay").style.display = "none";
+});
 
 
 
@@ -3503,6 +3747,7 @@ function renderGroupCard(season, group, pitch, totalOvers) {
         <div class="ps-match-score-row"><b>${getTeam(secondId)?.name}</b><span class="ps-match-score-value">${formatSeasonScore(secondScore)}</span></div>
         <div class="ps-match-result-row">${formatMatchResultLine(m)}</div>
         ${m.mom ? `<div class="ps-match-mom-row">Player of the Match: ${m.mom}</div>` : ""}
+        ${m.groundName ? `<div class="ps-match-ground-row">${m.groundName}</div>` : ""}
         <div class="ps-match-actions-row">
           <button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>
           <button class="ps-remove-btn remove-group-match-btn" data-group-id="${group.id}" data-match-id="${m.id}">Remove</button>
@@ -3550,6 +3795,7 @@ function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
         <div class="ps-match-score-row"><b>${getTeam(secondId)?.name}</b><span class="ps-match-score-value">${formatSeasonScore(secondScore)}</span></div>
         <div class="ps-match-result-row">${formatMatchResultLine(m)}</div>
         ${m.mom ? `<div class="ps-match-mom-row">Player of the Match: ${m.mom}</div>` : ""}
+        ${m.groundName ? `<div class="ps-match-ground-row">${m.groundName}</div>` : ""}
         <div class="ps-match-actions-row">
           <button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>
           <button class="ps-remove-btn remove-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Remove</button>
