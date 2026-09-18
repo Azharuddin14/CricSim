@@ -631,7 +631,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-18 · closed a rare over-cap edge case</p>
+  <p class="app-version-tag">Build 2026-09-18 · fixed off-by-one in bowler feasibility lookahead</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -1179,7 +1179,7 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
   // matches pickWeightedBowler's death-phase boundary (last 6 overs of 20)
   const deathPhase = over >= totalOvers - 6;
 
-  const remainingOversAfterThis = totalOvers - over;
+  const remainingOversAfterThis = totalOvers - over - 1;
   function feasibleAfterPicking(candidate) {
     if (remainingOversAfterThis <= 0) return true;
     let maxRemaining = 0, totalRemaining = 0, otherRemaining = 0;
@@ -1223,8 +1223,12 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
   );
 
   let candidates = pool.filter(b => !capped(b) && b !== lastOverBowler);
+  // Among the normally-eligible candidates, prefer ones that keep the
+  // rest of the innings legally completable — but if NONE of them do,
+  // that's the signal to escalate to the emergency pool below, not a
+  // reason to silently proceed with an already-doomed pick anyway.
   const feasibleCandidates = candidates.filter(feasibleAfterPicking);
-  if (feasibleCandidates.length > 0) candidates = feasibleCandidates;
+  candidates = feasibleCandidates;
   let mustRelaxCap = false;
   if (candidates.length === 0) {
     const emergencyPool = (fullTeam || eligible).filter(b => b.bowlingStyle !== "Does Not Bowl" && !capped(b) && b !== lastOverBowler);

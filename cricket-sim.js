@@ -411,7 +411,7 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
   // what's left) — the same feasibility condition behind any "no two
   // adjacent the same" scheduling problem. A captain does this kind of
   // arithmetic instinctively; this makes the engine do it too.
-  const remainingOversAfterThis = totalOvers - over;
+  const remainingOversAfterThis = totalOvers - over - 1;
   function feasibleAfterPicking(candidate) {
     if (remainingOversAfterThis <= 0) return true;
     let maxRemaining = 0, totalRemaining = 0, otherRemaining = 0;
@@ -460,11 +460,13 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
   // happen to be an off-phase type.
   let candidates = pool.filter(b => !capped(b) && b !== lastOverBowler);
   // Among the normally-eligible candidates, prefer ones that keep the
-  // rest of the innings legally completable — only fall back to the
-  // full (possibly infeasible-looking) set if every option would
-  // otherwise create a future dead-end anyway.
+  // rest of the innings legally completable — but if NONE of them do
+  // (every normal option would create a future dead-end), that's not a
+  // reason to silently proceed with an already-doomed pick anyway — it's
+  // exactly the signal to escalate to the emergency pool below, the same
+  // as if there had been no normal candidates at all.
   const feasibleCandidates = candidates.filter(feasibleAfterPicking);
-  if (feasibleCandidates.length > 0) candidates = feasibleCandidates;
+  candidates = feasibleCandidates;
   let mustRelaxCap = false;
   if (candidates.length === 0) {
     // Before ever bending the 4-over cap for an already-selected bowler,
