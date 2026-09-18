@@ -577,6 +577,43 @@
     padding-top: 12px; border-top: 1px dashed var(--line);
   }
   .tv-summary-mom { text-align: center; font-family: 'Inter', sans-serif; font-size: 12px; color: var(--cream-dim); margin-top: 6px; }
+
+  /* Landscape "broadcast graphic" layout — export-only, never shown in
+     the UI. Fixed 1200x675 (16:9) so nothing wraps or truncates. */
+  .tvl-canvas {
+    width: 1200px; min-height: 675px; box-sizing: border-box; padding: 40px 56px;
+    background: linear-gradient(135deg, #0F2C22 0%, #16362A 100%);
+    font-family: 'Inter', sans-serif; color: #F5EFDC;
+    display: flex; flex-direction: column;
+  }
+  .tvl-toss {
+    text-align: center; font-size: 18px; color: rgba(245,239,220,0.7);
+    padding-bottom: 18px; margin-bottom: 24px; border-bottom: 1px dashed rgba(245,239,220,0.25);
+  }
+  .tvl-body { display: flex; flex: 1; gap: 0; }
+  .tvl-column { flex: 1; padding: 0 32px; display: flex; flex-direction: column; }
+  .tvl-divider { width: 1px; background: rgba(245,239,220,0.2); margin: 0 8px; }
+  .tvl-team-header { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .tvl-team-dot { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 3px rgba(255,255,255,0.1); }
+  .tvl-team-name { font-family: 'Oswald', sans-serif; font-size: 26px; letter-spacing: 0.01em; }
+  .tvl-score { font-family: 'Oswald', sans-serif; font-size: 56px; font-weight: 600; color: #E9B44C; line-height: 1; margin: 4px 0 22px; }
+  .tvl-section-title {
+    font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: rgba(245,239,220,0.55); margin: 14px 0 8px;
+  }
+  .tvl-vs { text-transform: none; font-weight: 400; letter-spacing: 0; }
+  .tvl-line {
+    display: flex; justify-content: space-between; gap: 14px; font-size: 19px; padding: 5px 0;
+  }
+  .tvl-line-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tvl-line-stat { font-family: 'JetBrains Mono', monospace; color: rgba(245,239,220,0.75); flex-shrink: 0; }
+  .tvl-empty { font-size: 15px; color: rgba(245,239,220,0.5); font-style: italic; margin: 0; }
+  .tvl-result {
+    text-align: center; font-family: 'Oswald', sans-serif; font-size: 30px; color: #E9B44C;
+    padding-top: 24px; margin-top: 20px; border-top: 1px dashed rgba(245,239,220,0.25);
+  }
+  .tvl-mom { text-align: center; font-size: 16px; color: rgba(245,239,220,0.75); margin-top: 10px; }
+
   .super-over-summary {
     margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line);
   }
@@ -664,7 +701,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-18 · added TV-style match summary view + download</p>
+  <p class="app-version-tag">Build 2026-09-18 · summary polish, ball-by-ball now starts at 0.1</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -1670,7 +1707,11 @@ function renderFullBallByBall(timeline, oversSummary) {
   if (!timeline || timeline.length === 0) return "";
   const summaryByOver = new Map((oversSummary || []).map(s => [s.over, s]));
   const rows = timeline.map((b, i) => {
-    let html = `<div class="bbb-line">${b.over}.${b.ball} — ${b.commentary}</div>`;
+    // ball notation follows the real cricket convention — 0.1 is the
+    // first ball of the innings (completed overs so far, not an
+    // ordinal), so the over shown here is one less than b.over's
+    // internal 1-indexed value
+    let html = `<div class="bbb-line">${b.over - 1}.${b.ball} — ${b.commentary}</div>`;
     const next = timeline[i + 1];
     const isLastOfOver = !next || next.over !== b.over; // robust to extras sharing the same displayed ball number
     if (isLastOfOver && summaryByOver.has(b.over)) {
@@ -3844,12 +3885,40 @@ function openMatchSummary(result, colors, filenameBase) {
   content.innerHTML = renderMatchSummaryCard(result, colors);
   document.getElementById("matchSummaryOverlay").style.display = "flex";
   document.getElementById("downloadMatchSummaryBtn").onclick = () => {
-    downloadScorecardImage(content, filenameBase || `${result.firstTeamName}-vs-${result.secondTeamName}-summary`);
+    downloadLandscapeSummary(result, colors, filenameBase || `${result.firstTeamName}-vs-${result.secondTeamName}-summary`);
   };
 }
 document.getElementById("closeMatchSummaryBtn").addEventListener("click", () => {
   document.getElementById("matchSummaryOverlay").style.display = "none";
 });
+
+/** Renders the wide 16:9 broadcast-style summary off-screen (never
+ * visible to the user), captures it with html2canvas, then removes it —
+ * so the downloaded image looks like a TV graphic even though the
+ * on-screen modal stays a normal narrow, scrollable view. */
+function downloadLandscapeSummary(result, colors, filename) {
+  if (typeof html2canvas === "undefined") {
+    alert("Image export isn't available right now (html2canvas didn't load).");
+    return;
+  }
+  const holder = document.createElement("div");
+  holder.style.position = "fixed";
+  holder.style.left = "-9999px";
+  holder.style.top = "0";
+  holder.innerHTML = renderMatchSummaryLandscape(result, colors);
+  document.body.appendChild(holder);
+  const canvasTarget = holder.querySelector(".tvl-canvas");
+  html2canvas(canvasTarget, { backgroundColor: "#0F2C22", scale: 2 }).then(canvas => {
+    document.body.removeChild(holder);
+    const link = document.createElement("a");
+    link.download = `${filename}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  }).catch(() => {
+    document.body.removeChild(holder);
+    alert("Couldn't generate the image — try again.");
+  });
+}
 
 
 
@@ -4228,7 +4297,7 @@ function playBackMatch(result, teamColors, opts) {
     liveScore.textContent = `${b.score}/${b.wickets} (${formatOvers(decimalOvers)})`;
     const line = document.createElement("div");
     line.className = "ball-line" + (b.commentary.includes("!") ? " highlight" : "");
-    line.textContent = `${b.over}.${b.ball}  ${b.commentary}`;
+    line.textContent = `${b.over - 1}.${b.ball}  ${b.commentary}`;
     feed.prepend(line);
     const next = inn.timeline[ballIdx + 1];
     const isLastOfOver = !next || next.over !== b.over;
@@ -4288,6 +4357,19 @@ function getMainResultText(result) {
   return "Match Tied";
 }
 
+/** Same as getMainResultText, but with the winning team's name spelled
+ * out ("Team A won by 12 runs") rather than left implicit — the main
+ * scorecard leaves the name off because the team names already sit
+ * right above the result line there, but the summary card's result
+ * line is read on its own, further from the scores, so it needs to be
+ * self-contained. A tied result already names the winner via the
+ * Super Over text, so that part is unchanged. */
+function getSummaryResultText(result) {
+  if (result.margin === "Match tied") return getMainResultText(result);
+  const winnerName = result.second.runs > result.first.runs ? result.secondTeamName : result.firstTeamName;
+  return `${winnerName} ${result.margin}`;
+}
+
 function topBatters(battingLog, n) {
   return [...battingLog].filter(b => b.balls > 0)
     .sort((a, b) => b.runs - a.runs || a.balls - b.balls)
@@ -4324,11 +4406,9 @@ function renderMatchSummaryCard(result, colors) {
     const batters = topBatters(innings.battingLog, 3).map(b =>
       `<div class="tv-summary-line"><span class="tv-summary-line-name">${b.name}</span><span class="tv-summary-line-stat">${b.runs}${b.out ? "" : "*"} (${b.balls})</span></div>`
     ).join("") || `<p class="tv-summary-empty">No batters yet.</p>`;
-    const bowlers = topBowlers(innings.bowlingLog, 3).map(b => {
-      const fullOvers = Math.floor(b.overs) + (b.overs % 1) * 10 / 6;
-      const econ = fullOvers > 0 ? (b.runs / fullOvers).toFixed(2) : "0.00";
-      return `<div class="tv-summary-line"><span class="tv-summary-line-name">${b.name}</span><span class="tv-summary-line-stat">${b.wickets}/${b.runs} (${econ})</span></div>`;
-    }).join("") || `<p class="tv-summary-empty">No bowlers yet.</p>`;
+    const bowlers = topBowlers(innings.bowlingLog, 3).map(b =>
+      `<div class="tv-summary-line"><span class="tv-summary-line-name">${b.name}</span><span class="tv-summary-line-stat">${b.wickets}/${b.runs}</span></div>`
+    ).join("") || `<p class="tv-summary-empty">No bowlers yet.</p>`;
     return `
       <div class="tv-summary-innings">
         <div class="tv-summary-team-header">
@@ -4357,7 +4437,55 @@ function renderMatchSummaryCard(result, colors) {
       <div class="tv-summary-toss">${tossLine}</div>
       ${inningsBlock(result.firstTeamName, c.firstTeamColor, c.secondTeamColor, result.secondTeamName, result.first)}
       ${inningsBlock(result.secondTeamName, c.secondTeamColor, c.firstTeamColor, result.firstTeamName, result.second)}
-      <div class="tv-summary-result">${getMainResultText(result)}</div>
+      <div class="tv-summary-result">${getSummaryResultText(result)}</div>
+      ${momLine}
+    </div>`;
+}
+
+/** Same content as renderMatchSummaryCard, but laid out wide (fixed
+ * 1200x675, a 16:9 "broadcast graphic" shape) with the two innings
+ * side-by-side rather than stacked. Built specifically for image
+ * export — narrow text at the modal's mobile width was getting cramped
+ * and truncated when captured at 2x scale; a fixed-width layout sized
+ * for the purpose renders every value in full instead. Rendered
+ * off-screen, captured, then removed — never shown in the UI itself. */
+function renderMatchSummaryLandscape(result, colors) {
+  const c = colors || { firstTeamColor: "#E63946", secondTeamColor: "#1D3557" };
+  const tossLine = `${result.toss.tossWinnerName} won the toss and chose to ${result.toss.decision === "bat" ? "bat" : "bowl"} first.`;
+
+  const inningsColumn = (teamName, teamColor, oppName, innings) => {
+    const batters = topBatters(innings.battingLog, 3).map(b =>
+      `<div class="tvl-line"><span class="tvl-line-name">${b.name}</span><span class="tvl-line-stat">${b.runs}${b.out ? "" : "*"} (${b.balls})</span></div>`
+    ).join("") || `<p class="tvl-empty">No batters yet.</p>`;
+    const bowlers = topBowlers(innings.bowlingLog, 3).map(b =>
+      `<div class="tvl-line"><span class="tvl-line-name">${b.name}</span><span class="tvl-line-stat">${b.wickets}/${b.runs}</span></div>`
+    ).join("") || `<p class="tvl-empty">No bowlers yet.</p>`;
+    return `
+      <div class="tvl-column">
+        <div class="tvl-team-header">
+          <span class="tvl-team-dot" style="background:${teamColor};"></span>
+          <span class="tvl-team-name">${teamName}</span>
+        </div>
+        <div class="tvl-score">${innings.scoreText}</div>
+        <div class="tvl-section-title">Top Batters</div>
+        ${batters}
+        <div class="tvl-section-title">Top Bowlers <span class="tvl-vs">(${oppName})</span></div>
+        ${bowlers}
+      </div>`;
+  };
+
+  const momLine = result.motm
+    ? `<div class="tvl-mom">Man of the Match: <b>${result.motm.name}</b> (${result.motm.teamName})</div>` : "";
+
+  return `
+    <div class="tvl-canvas">
+      <div class="tvl-toss">${tossLine}</div>
+      <div class="tvl-body">
+        ${inningsColumn(result.firstTeamName, c.firstTeamColor, result.secondTeamName, result.first)}
+        <div class="tvl-divider"></div>
+        ${inningsColumn(result.secondTeamName, c.secondTeamColor, result.firstTeamName, result.second)}
+      </div>
+      <div class="tvl-result">${getSummaryResultText(result)}</div>
       ${momLine}
     </div>`;
 }
