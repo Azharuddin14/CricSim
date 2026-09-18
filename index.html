@@ -544,6 +544,39 @@
     border-radius: 0 0 6px 6px;
     margin-bottom: 24px;
   }
+  .tv-summary-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin-bottom: 20px;
+  }
+  .tv-summary-toss {
+    text-align: center; font-family: 'Inter', sans-serif; font-size: 12.5px; color: var(--cream-dim);
+    margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px dashed var(--line);
+  }
+  .tv-summary-innings { margin-bottom: 18px; }
+  .tv-summary-innings:last-of-type { margin-bottom: 14px; }
+  .tv-summary-team-header {
+    display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px;
+  }
+  .tv-summary-team-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 2px rgba(255,255,255,0.08); }
+  .tv-summary-team-name { font-family: 'Oswald', sans-serif; font-size: 17px; color: var(--cream); flex: 1; }
+  .tv-summary-score { font-family: 'Oswald', sans-serif; font-size: 22px; font-weight: 600; color: var(--amber); }
+  .tv-summary-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .tv-summary-col-title {
+    font-family: 'Inter', sans-serif; font-weight: 600; font-size: 10.5px; color: var(--cream-dim);
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px;
+  }
+  .tv-summary-line {
+    display: flex; justify-content: space-between; gap: 8px; font-family: 'Inter', sans-serif;
+    font-size: 12.5px; color: var(--cream); padding: 3px 0;
+  }
+  .tv-summary-line-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tv-summary-line-stat { font-family: 'JetBrains Mono', monospace; color: var(--cream-dim); flex-shrink: 0; }
+  .tv-summary-empty { font-size: 11.5px; color: var(--cream-dim); font-style: italic; margin: 0; }
+  .tv-summary-result {
+    text-align: center; font-family: 'Oswald', sans-serif; font-size: 16px; color: var(--amber);
+    padding-top: 12px; border-top: 1px dashed var(--line);
+  }
+  .tv-summary-mom { text-align: center; font-family: 'Inter', sans-serif; font-size: 12px; color: var(--cream-dim); margin-top: 6px; }
   .super-over-summary {
     margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line);
   }
@@ -631,10 +664,11 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-18 · fixed off-by-one in bowler feasibility lookahead</p>
+  <p class="app-version-tag">Build 2026-09-18 · added TV-style match summary view + download</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
+  <button class="seasons-launch-btn" id="openSettingsBtn" style="background:transparent; border:1px solid var(--line); color:var(--cream-dim);">⚙ Settings</button>
 </header>
 
 <main>
@@ -725,6 +759,32 @@
       <div id="teamProfileContent"></div>
       <div class="modal-actions" style="margin-top:14px;">
         <button type="button" class="btn-ghost" id="closeTeamProfileBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingsOverlay" class="modal-overlay">
+    <div class="modal-box" style="max-width:440px;">
+      <h2>Settings</h2>
+      <label>Balls per second (live playback speed)
+        <input type="number" id="settingsBallsPerSecond" min="1" max="30" step="1" />
+      </label>
+      <p class="hint-text" style="margin-top:10px;">
+        Controls how fast the ball-by-ball reveal plays for every match you simulate from here on — Friendlies and Season matches alike. Higher is faster.
+      </p>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button type="button" class="btn-primary" id="saveSettingsBtn">Save</button>
+        <button type="button" class="btn-ghost" id="closeSettingsBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="matchSummaryOverlay" class="modal-overlay">
+    <div class="modal-box" style="max-width:460px; max-height:85vh; overflow-y:auto;">
+      <div id="matchSummaryContent"></div>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button type="button" class="btn-primary" id="downloadMatchSummaryBtn">⬇ Download</button>
+        <button type="button" class="btn-ghost" id="closeMatchSummaryBtn">Close</button>
       </div>
     </div>
   </div>
@@ -1831,7 +1891,7 @@ async function idbPutAllMatches(matches) {
   }
 }
 
-const appState = { players: [], teams: [], matches: [], seasons: [], grounds: [] };
+const appState = { players: [], teams: [], matches: [], seasons: [], grounds: [], settings: { ballsPerSecond: 12 } };
 
 function seedDefaultData() {
   appState.players = [
@@ -1906,6 +1966,10 @@ function loadPersistedState() {
     appState.teams = data.appState.teams || [];
     appState.seasons = data.appState.seasons || [];
     appState.grounds = data.appState.grounds || [];
+    // merge with the default so an older save (from before this setting
+    // existed) still gets a sensible value, and any future new settings
+    // added later don't get lost from an in-between save either
+    appState.settings = { ballsPerSecond: 12, ...(data.appState.settings || {}) };
     // matches are hydrated separately from IndexedDB (see
     // hydrateMatchesFromIndexedDB below) — start empty here so the rest
     // of the app boots instantly and synchronously as before; matches
@@ -3726,7 +3790,7 @@ function renderSeasonsAppDetail() {
 }
 
 function wireScorecardButtons() {
-  document.querySelectorAll(".ps-scorecard-btn").forEach(btn => {
+  document.querySelectorAll(".ps-scorecard-btn.view-scorecard-btn").forEach(btn => {
     btn.onclick = () => {
       const season = getSeason(seasonsAppActiveSeasonId);
       const allMatches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)];
@@ -3738,12 +3802,53 @@ function wireScorecardButtons() {
       document.getElementById("seasonScorecardOverlay").style.display = "flex";
     };
   });
+  document.querySelectorAll(".view-summary-season-btn").forEach(btn => {
+    btn.onclick = () => {
+      const season = getSeason(seasonsAppActiveSeasonId);
+      const allMatches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)];
+      const match = allMatches.find(m => m.id === Number(btn.dataset.matchId));
+      if (!match || !match.fullResult) return;
+      const teamA = getTeam(match.team1Id), teamB = getTeam(match.team2Id);
+      openMatchSummary(match.fullResult, { firstTeamColor: teamA?.color || "#E63946", secondTeamColor: teamB?.color || "#1D3557" }, `${teamA?.name}-vs-${teamB?.name}-summary`);
+    };
+  });
 }
 document.getElementById("closeSeasonScorecardBtn").addEventListener("click", () => {
   document.getElementById("seasonScorecardOverlay").style.display = "none";
 });
 document.getElementById("closeTeamProfileBtn").addEventListener("click", () => {
   document.getElementById("teamProfileOverlay").style.display = "none";
+});
+
+document.getElementById("openSettingsBtn").addEventListener("click", () => {
+  document.getElementById("settingsBallsPerSecond").value = appState.settings?.ballsPerSecond || 12;
+  document.getElementById("settingsOverlay").style.display = "flex";
+});
+document.getElementById("saveSettingsBtn").addEventListener("click", () => {
+  const input = document.getElementById("settingsBallsPerSecond");
+  const value = Math.min(30, Math.max(1, Number(input.value) || 12));
+  appState.settings = { ...appState.settings, ballsPerSecond: value };
+  persistState();
+  document.getElementById("settingsOverlay").style.display = "none";
+});
+document.getElementById("closeSettingsBtn").addEventListener("click", () => {
+  document.getElementById("settingsOverlay").style.display = "none";
+});
+
+/** Opens the shared TV-style match summary modal for any result — used
+ * by Friendlies' inline "View Summary" button and by each Season match
+ * card's own button alike, so there's one summary view and one download
+ * path regardless of where the match came from. */
+function openMatchSummary(result, colors, filenameBase) {
+  const content = document.getElementById("matchSummaryContent");
+  content.innerHTML = renderMatchSummaryCard(result, colors);
+  document.getElementById("matchSummaryOverlay").style.display = "flex";
+  document.getElementById("downloadMatchSummaryBtn").onclick = () => {
+    downloadScorecardImage(content, filenameBase || `${result.firstTeamName}-vs-${result.secondTeamName}-summary`);
+  };
+}
+document.getElementById("closeMatchSummaryBtn").addEventListener("click", () => {
+  document.getElementById("matchSummaryOverlay").style.display = "none";
 });
 
 
@@ -3777,6 +3882,7 @@ function renderGroupCard(season, group, pitch, totalOvers) {
         ${m.mom ? `<div class="ps-match-mom-row">Player of the Match: ${m.mom}</div>` : ""}
         ${m.groundName ? `<div class="ps-match-ground-row">${m.groundName}</div>` : ""}
         <div class="ps-match-actions-row">
+          <button class="ps-scorecard-btn view-summary-season-btn" data-match-id="${m.id}">📺 Summary</button>
           <button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>
           <button class="ps-remove-btn remove-group-match-btn" data-group-id="${group.id}" data-match-id="${m.id}">Remove</button>
         </div>
@@ -3825,6 +3931,7 @@ function renderKnockoutRoundCard(season, round, pitch, totalOvers) {
         ${m.mom ? `<div class="ps-match-mom-row">Player of the Match: ${m.mom}</div>` : ""}
         ${m.groundName ? `<div class="ps-match-ground-row">${m.groundName}</div>` : ""}
         <div class="ps-match-actions-row">
+          <button class="ps-scorecard-btn view-summary-season-btn" data-match-id="${m.id}">📺 Summary</button>
           <button class="ps-scorecard-btn view-scorecard-btn" data-match-id="${m.id}">View Scorecard</button>
           <button class="ps-remove-btn remove-ko-match-btn" data-round-id="${round.id}" data-match-id="${m.id}">Remove</button>
         </div>
@@ -4068,7 +4175,7 @@ function playBackMatch(result, teamColors, opts) {
   const finalSummaryEl = opts.finalSummaryEl || document.getElementById("finalSummary");
   const tossLineEl = opts.tossLineEl || document.getElementById("tossLine");
   const onComplete = opts.onComplete || null;
-  const MS_PER_BALL = 1000 / 12; // 2 overs = 12 balls per second
+  const MS_PER_BALL = 1000 / (appState.settings?.ballsPerSecond || 12);
   const colors = teamColors || { firstTeamColor: "#E63946", secondTeamColor: "#1D3557" };
 
   const innings = [
@@ -4164,20 +4271,104 @@ function buildTeamCard(battingTeamName, bowlingTeamName, battingColor, bowlingCo
  * finishes normally, and when restoring an already-finished match after a
  * page reload (the whole match is computed instantly up front, so a
  * reload never actually loses any computation, only the cosmetic replay). */
+/** Sorts a batting log to the top N scorers — ties broken by strike rate
+ * (fewer balls for the same runs ranks higher), matching how a TV
+ * broadcast graphic would order "Top Scorers". */
+/** The main result line text, resolving a tie via its Super Over when
+ * one was played — "Match Tied : Team A won the Super Over" rather than
+ * a bare "Match tied" that ignores how it was actually settled. Shared
+ * by the full scorecard and the TV-style summary so both agree. */
+function getMainResultText(result) {
+  if (result.margin !== "Match tied") return result.margin;
+  if (result.superOver?.winnerTeamName) {
+    const attempt = result.superOver.attempt || 1;
+    const soLabel = attempt > 1 ? `${ordinal(attempt)} Super Over` : "Super Over";
+    return `Match Tied : ${result.superOver.winnerTeamName} won the ${soLabel}`;
+  }
+  return "Match Tied";
+}
+
+function topBatters(battingLog, n) {
+  return [...battingLog].filter(b => b.balls > 0)
+    .sort((a, b) => b.runs - a.runs || a.balls - b.balls)
+    .slice(0, n);
+}
+
+/** Sorts a bowling log to the top N by wickets, then economy — the
+ * standard "Best Bowling" ordering. */
+function topBowlers(bowlingLog, n) {
+  return [...bowlingLog].filter(b => b.overs > 0)
+    .sort((a, b) => {
+      if (b.wickets !== a.wickets) return b.wickets - a.wickets;
+      const oversA = Math.floor(a.overs) + (a.overs % 1) * 10 / 6;
+      const oversB = Math.floor(b.overs) + (b.overs % 1) * 10 / 6;
+      const econA = oversA > 0 ? a.runs / oversA : 999;
+      const econB = oversB > 0 ? b.runs / oversB : 999;
+      return econA - econB;
+    })
+    .slice(0, n);
+}
+
+/** A TV-broadcast-style match summary: each innings' score with its top
+ * 3 batters and the top 3 bowlers from the opposing side, toss and MOM
+ * at top/bottom — the "highlights graphic" view, as distinct from the
+ * full ball-by-ball scorecard. Used for both Friendlies and Season
+ * matches; a Super Over's own batting/bowling detail is deliberately
+ * left out here (its result is enough context in this summary), since
+ * the point of this view is the main match at a glance. */
+function renderMatchSummaryCard(result, colors) {
+  const c = colors || { firstTeamColor: "#E63946", secondTeamColor: "#1D3557" };
+  const tossLine = `${result.toss.tossWinnerName} won the toss and chose to ${result.toss.decision === "bat" ? "bat" : "bowl"} first.`;
+
+  const inningsBlock = (teamName, teamColor, oppColor, oppName, innings) => {
+    const batters = topBatters(innings.battingLog, 3).map(b =>
+      `<div class="tv-summary-line"><span class="tv-summary-line-name">${b.name}</span><span class="tv-summary-line-stat">${b.runs}${b.out ? "" : "*"} (${b.balls})</span></div>`
+    ).join("") || `<p class="tv-summary-empty">No batters yet.</p>`;
+    const bowlers = topBowlers(innings.bowlingLog, 3).map(b => {
+      const fullOvers = Math.floor(b.overs) + (b.overs % 1) * 10 / 6;
+      const econ = fullOvers > 0 ? (b.runs / fullOvers).toFixed(2) : "0.00";
+      return `<div class="tv-summary-line"><span class="tv-summary-line-name">${b.name}</span><span class="tv-summary-line-stat">${b.wickets}/${b.runs} (${econ})</span></div>`;
+    }).join("") || `<p class="tv-summary-empty">No bowlers yet.</p>`;
+    return `
+      <div class="tv-summary-innings">
+        <div class="tv-summary-team-header">
+          <span class="tv-summary-team-dot" style="background:${teamColor};"></span>
+          <span class="tv-summary-team-name">${teamName}</span>
+          <span class="tv-summary-score">${innings.scoreText}</span>
+        </div>
+        <div class="tv-summary-cols">
+          <div class="tv-summary-col">
+            <div class="tv-summary-col-title">Top Batters</div>
+            ${batters}
+          </div>
+          <div class="tv-summary-col">
+            <div class="tv-summary-col-title">Top Bowlers (${oppName})</div>
+            ${bowlers}
+          </div>
+        </div>
+      </div>`;
+  };
+
+  const momLine = result.motm
+    ? `<div class="tv-summary-mom">Man of the Match: <b>${result.motm.name}</b> (${result.motm.teamName})</div>` : "";
+
+  return `
+    <div class="tv-summary-card">
+      <div class="tv-summary-toss">${tossLine}</div>
+      ${inningsBlock(result.firstTeamName, c.firstTeamColor, c.secondTeamColor, result.secondTeamName, result.first)}
+      ${inningsBlock(result.secondTeamName, c.secondTeamColor, c.firstTeamColor, result.firstTeamName, result.second)}
+      <div class="tv-summary-result">${getMainResultText(result)}</div>
+      ${momLine}
+    </div>`;
+}
+
 function renderCompleteScorecard(result, colors, finalEl, matchContext) {
   finalEl = finalEl || document.getElementById("finalSummary");
   const motmHtml = result.motm
     ? `<div class="motm-line">Man of the Match: <b>${result.motm.name}</b> (${result.motm.teamName})</div>`
     : "";
   const superOverHtml = result.superOver ? renderSuperOverSummary(result.superOver) : "";
-  let mainResultText = result.margin;
-  if (result.margin === "Match tied" && result.superOver?.winnerTeamName) {
-    const attempt = result.superOver.attempt || 1;
-    const soLabel = attempt > 1 ? `${ordinal(attempt)} Super Over` : "Super Over";
-    mainResultText = `Match Tied : ${result.superOver.winnerTeamName} won the ${soLabel}`;
-  } else if (result.margin === "Match tied") {
-    mainResultText = "Match Tied";
-  }
+  const mainResultText = getMainResultText(result);
   const scoreboardHtml = `
     <div class="scoreboard">
       <div class="side"><div class="team-label">${result.firstTeamName}</div><div class="score">${result.first.scoreText}</div></div>
@@ -4206,6 +4397,7 @@ function renderCompleteScorecard(result, colors, finalEl, matchContext) {
     <div class="sc-tab-panel active" data-scpanel="first">${firstCard}</div>
     <div class="sc-tab-panel" data-scpanel="second">${secondCard}</div>
     <div class="controls-row" style="margin-top:16px;">
+      <button class="btn-ghost view-summary-btn">📺 View Summary</button>
       <button class="btn-ghost download-scorecard-btn">⬇ Download scorecard as image</button>
     </div>
   `;
@@ -4223,6 +4415,9 @@ function renderCompleteScorecard(result, colors, finalEl, matchContext) {
     });
   });
 
+  finalEl2.querySelector(".view-summary-btn").addEventListener("click", () => {
+    openMatchSummary(result, colors, `${result.firstTeamName}-vs-${result.secondTeamName}-summary`);
+  });
   finalEl2.querySelector("#downloadScorecardBtn, .download-scorecard-btn").addEventListener("click", () => {
     downloadScorecardImage(finalEl2, `${result.firstTeamName}-vs-${result.secondTeamName}-scorecard`);
   });
