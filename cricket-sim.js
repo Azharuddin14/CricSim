@@ -280,8 +280,15 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns, runsLeak
   // powerplay-equivalent window: first 6 overs + 2 more (8 of 20), scaled
   // proportionally for other match lengths
   const earlyPhase = over < Math.round(totalOvers * 0.4);
-  const deathPhase = over >= totalOvers - 4;
+  // death: last 6 overs (15-20 of 20) — real T20 captaincy brings back
+  // death bowlers and the specialists/high-rated pace held back from the
+  // powerplay well before just the final 4, not only right at the end
+  const deathPhase = over >= totalOvers - 6;
   const middlePhase = !earlyPhase && !deathPhase;
+  // the very last two overs specifically — spin all but disappears here
+  // (not zero, but rare) even though it can still be a real option
+  // earlier in the death phase
+  const finalTwoOvers = over >= totalOvers - 2;
   const isFastStyle = b => b.bowlingStyle === "Right Arm Fast" || b.bowlingStyle === "Left Arm Fast";
   const weights = candidates.map(b => {
     // squaring the rating sharpens the gap between genuine frontline bowlers
@@ -313,27 +320,30 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns, runsLeak
       if (b.bowlingSkill === "Mystery Spinner") w *= 0.4;
       if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 0.15;
     } else if (middlePhase) {
-      // middle: mystery spinners are the priority option; death bowlers
-      // start easing in from over ~12 as the innings turns toward the end.
-      // The generic pace penalty is waived for a specialist — they're
-      // still a real option here, just not the default pick — and if
-      // runs are actually leaking (high current run rate), a captain
+      // middle (9-14 of 20): this is the spin duo's window — real T20
+      // captaincy leans heavily on spin here, well beyond just a mild
+      // preference, with death bowlers starting to ease in as the
+      // innings turns toward the end. The generic pace penalty is
+      // waived for a specialist — still a real option, just not the
+      // default pick — and if runs are actually leaking, a captain
       // brings their strike bowler straight back to stem the flow.
-      if (isSp) w *= 1.6;
-      if (isPace && !isSpecialist) w *= 0.7;
-      if (b.bowlingSkill === "Mystery Spinner") w *= 2.2;
-      if (b.bowlingSkill === "Death/Old Ball Bowler" && over >= 11) w *= 1.15;
+      if (isSp) w *= 2.2;
+      if (isPace && !isSpecialist) w *= 0.6;
+      if (b.bowlingSkill === "Mystery Spinner") w *= 1.4;
+      if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 1.15;
       if (runsLeaking && isSpecialist) w *= 2.0;
     } else if (deathPhase) {
-      // death: a specialist seamer with overs still in hand outranks even
-      // a dedicated death bowler — they were saved specifically for this
-      // moment. The death bowler is still a strong second option, and
-      // new-ball bowlers get a boost too for the reverse-swing angle.
+      // death (15-20 of 20): dominated by dedicated death bowlers plus
+      // the specialists/high-rated pace held back from the powerplay —
+      // spin is a real but shrinking option through most of this phase,
+      // then all but disappears in the final two overs specifically
+      // (rare, not impossible — a captain in a real bind might still
+      // gamble on it).
       if (isPace) w *= 1.6;
       if (isSpecialist && isPace) w *= 1.6;
       if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 1.9;
       if (b.bowlingSkill === "New Ball Bowler") w *= 1.4;
-      if (isSp) w *= 0.25;
+      if (isSp) w *= finalTwoOvers ? 0.06 : 0.3;
     }
 
     // "X" (no special skill) means a genuine part-timer only if their
@@ -387,7 +397,8 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
     return isGenuinePartTimer ? Math.min(2, generalMax) : generalMax;
   };
   const capped = b => (oversBowledMap.get(b) || 0) >= capFor(b);
-  const deathPhase = over >= totalOvers - 4;
+  // matches pickWeightedBowler's death-phase boundary (last 6 overs of 20)
+  const deathPhase = over >= totalOvers - 6;
 
   // Whole-innings lookahead: with a small bowling attack (e.g. exactly 5
   // bowlers × 4 overs = 20), greedy over-by-over selection can paint

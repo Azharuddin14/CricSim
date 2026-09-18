@@ -1036,8 +1036,15 @@ function getEligibleBowlers(bowlingTeam, totalOvers) {
 /** Pure weighted pick from a candidate pool — rating plus phase/style fit. */
 function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns, runsLeaking, heldBackBowlers) {
   const earlyPhase = over < Math.round(totalOvers * 0.4);
-  const deathPhase = over >= totalOvers - 4;
+  // death: last 6 overs (15-20 of 20) — real T20 captaincy brings back
+  // death bowlers and the specialists/high-rated pace held back from the
+  // powerplay well before just the final 4, not only right at the end
+  const deathPhase = over >= totalOvers - 6;
   const middlePhase = !earlyPhase && !deathPhase;
+  // the very last two overs specifically — spin all but disappears here
+  // (not zero, but rare) even though it can still be a real option
+  // earlier in the death phase
+  const finalTwoOvers = over >= totalOvers - 2;
   const isFastStyle = b => b.bowlingStyle === "Right Arm Fast" || b.bowlingStyle === "Left Arm Fast";
   const weights = candidates.map(b => {
     // squaring the rating (pushed to 2.5) sharpens the gap between
@@ -1065,21 +1072,29 @@ function pickWeightedBowler(candidates, over, totalOvers, lastOverRuns, runsLeak
       if (b.bowlingSkill === "Mystery Spinner") w *= 0.4;
       if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 0.15;
     } else if (middlePhase) {
-      // the generic pace penalty is waived for a specialist — still a
-      // real option here, just not the default pick — and if runs are
-      // actually leaking, a captain brings their strike bowler straight
-      // back to stem the flow, even mid-innings
-      if (isSp) w *= 1.6;
-      if (isPace && !isSpecialist) w *= 0.7;
-      if (b.bowlingSkill === "Mystery Spinner") w *= 2.2;
-      if (b.bowlingSkill === "Death/Old Ball Bowler" && over >= 11) w *= 1.15;
+      // middle (9-14 of 20): this is the spin duo's window — real T20
+      // captaincy leans heavily on spin here, well beyond just a mild
+      // preference, with death bowlers starting to ease in as the
+      // innings turns toward the end. The generic pace penalty is
+      // waived for a specialist — still a real option, just not the
+      // default pick — and if runs are actually leaking, a captain
+      // brings their strike bowler straight back to stem the flow.
+      if (isSp) w *= 2.2;
+      if (isPace && !isSpecialist) w *= 0.6;
+      if (b.bowlingSkill === "Mystery Spinner") w *= 1.4;
+      if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 1.15;
       if (runsLeaking && isSpecialist) w *= 2.0;
     } else if (deathPhase) {
+      // death (15-20 of 20): dominated by dedicated death bowlers plus
+      // the specialists/high-rated pace held back from the powerplay —
+      // spin is a real but shrinking option through most of this phase,
+      // then all but disappears in the final two overs specifically
+      // (rare, not impossible).
       if (isPace) w *= 1.6;
       if (isSpecialist && isPace) w *= 1.6;
       if (b.bowlingSkill === "Death/Old Ball Bowler") w *= 1.9;
       if (b.bowlingSkill === "New Ball Bowler") w *= 1.4;
-      if (isSp) w *= 0.25;
+      if (isSp) w *= finalTwoOvers ? 0.06 : 0.3;
     }
 
     // "X" (no special skill) means a genuine part-timer only if their
@@ -1127,7 +1142,8 @@ function chooseBowlerForOver({ eligible, fullTeam, oversBowledMap, over, totalOv
     return isGenuinePartTimer ? Math.min(2, generalMax) : generalMax;
   };
   const capped = b => (oversBowledMap.get(b) || 0) >= capFor(b);
-  const deathPhase = over >= totalOvers - 4;
+  // matches pickWeightedBowler's death-phase boundary (last 6 overs of 20)
+  const deathPhase = over >= totalOvers - 6;
 
   const remainingOversAfterThis = totalOvers - over;
   function feasibleAfterPicking(candidate) {
