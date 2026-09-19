@@ -127,6 +127,21 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
     // risk stays the highest of any batting skill, since a wild swing
     // that misses clean is also the swing most likely to end the innings.
     p[4] *= sc(1.27); p[6] *= sc(1.54); p.W *= sc(1.54); p[0] *= sc(1.15);
+  } else if ((batter.battingSkill === "None" || !batter.battingSkill) && batter.batting > 75) {
+    // "X is like no skill, but if rating is high they can play good, just
+    // like Sachin, Babar, Rizwan — no traits, higher rating can make big
+    // numbers." Named skills get a real, deliberate boost, so pure rating
+    // alone couldn't compete even at the ceiling — this closes that gap:
+    // above 75 rating, class alone starts to matter, growing toward the
+    // top of the scale. It leans toward survival and steady scoring
+    // (fewer dismissals, better rotation) rather than explosive hitting —
+    // that's what separates the "no-frills master" from a Slogger or
+    // Finisher, consistency rather than spectacle.
+    const classBonus = clamp((batter.batting - 75) / 22, 0, 1);
+    p.W *= 1 - classBonus * 0.30;
+    p[1] *= 1 + classBonus * 0.12;
+    p[4] *= 1 + classBonus * 0.14;
+    p[0] *= 1 - classBonus * 0.10;
   }
 
   // 3. Bowling special skills — same amplification applied

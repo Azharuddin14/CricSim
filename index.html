@@ -705,7 +705,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-19 · batting skills now scale with rating</p>
+  <p class="app-version-tag">Build 2026-09-19 · X (no-skill) now competes at high rating</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -1041,6 +1041,18 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   // toh six" — boom-or-bust weighted toward bust: MORE dots than a
   // normal batter, not fewer, since most swings don't connect clean.
   else if (batter.battingSkill === "Pinch Hitter") { p[4] *= sc(1.27); p[6] *= sc(1.54); p.W *= sc(1.54); p[0] *= sc(1.15); }
+  else if ((batter.battingSkill === "None" || !batter.battingSkill) && batter.batting > 75) {
+    // "X is like no skill, but if rating is high they can play good" —
+    // named skills get a real boost, so pure rating alone couldn't
+    // compete even at the ceiling. Above 75 rating, class alone starts
+    // to matter, growing toward the top of the scale — leaning toward
+    // survival/steady scoring rather than explosive hitting.
+    const classBonus = clamp((batter.batting - 75) / 22, 0, 1);
+    p.W *= 1 - classBonus * 0.30;
+    p[1] *= 1 + classBonus * 0.12;
+    p[4] *= 1 + classBonus * 0.14;
+    p[0] *= 1 - classBonus * 0.10;
+  }
 
   if (bowler.bowlingSkill === "Specialist Bowler") {
     // still sharpest in the powerplay and at the death — a real, if
