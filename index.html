@@ -240,6 +240,7 @@
   .sq-card-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .sq-card-name { color: var(--cream); font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sq-card-meta { color: var(--cream-dim); font-size: 10.5px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.01em; }
+  .sq-card-chips { display: flex; gap: 6px; margin-top: 3px; }
   .ground-country-heading {
     font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--amber); font-size: 12px; margin-top: 16px; margin-bottom: 6px;
@@ -263,7 +264,8 @@
     cursor: pointer; transition: background 0.12s;
   }
   .add-player-row:hover, .add-player-row:active { background: rgba(255,255,255,0.08); }
-  .add-player-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .add-player-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+  .add-player-chips { display: flex; gap: 6px; flex-shrink: 0; }
   .add-player-name { font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13.5px; color: var(--cream); }
   .add-player-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cream-dim); }
   .add-player-plus { flex-shrink: 0; color: var(--amber); font-size: 18px; font-weight: 600; line-height: 1; width: 20px; text-align: center; }
@@ -705,7 +707,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-19 · X (no-skill) now competes at high rating</p>
+  <p class="app-version-tag">Build 2026-09-19 · Select Teams now shows Squad Ledger-style rating/skill chips</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -2623,7 +2625,14 @@ function renderTeamsTab() {
 
   const team = getTeam(currentTeamView);
   const players = teamPlayers(team);
-  const rows = players.map((p, idx) => `
+  const rows = players.map((p, idx) => {
+    const batChip = p.role === "purebowler"
+      ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
+      : skillChipHtml(p.batting, p.battingSkill === "Specialist Batsman", BATTING_SKILL_SHORT[p.battingSkill]);
+    const bowlChip = p.bowlingStyle === "Does Not Bowl"
+      ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
+      : skillChipHtml(p.bowling, p.bowlingSkill === "Specialist Bowler", BOWLING_SKILL_SHORT[p.bowlingSkill]);
+    return `
     <div class="sq-player-card" data-player-id="${p.id}">
       <div class="sq-order-num">${idx + 1}</div>
       <div class="sq-order-stack">
@@ -2631,11 +2640,12 @@ function renderTeamsTab() {
         <button class="sq-order-btn move-down-btn" data-idx="${idx}" ${idx === players.length - 1 ? "disabled" : ""}>▼</button>
       </div>
       <div class="sq-card-body">
-        <span class="sq-card-name">${p.name}</span>
-        <span class="sq-card-meta">${p.role === "purebowler" ? "Bat —" : "Bat " + p.batting} · ${(p.role === "purebatter" || p.role === "keeper") ? "Bowl —" : "Bowl " + p.bowling}${p.isWicketKeeper ? " · WK" : ""}</span>
+        <span class="sq-card-name">${p.name}${p.isWicketKeeper ? ` <span class="hint-text" style="font-size:10px;">WK</span>` : ""}</span>
+        <div class="sq-card-chips">${batChip}${bowlChip}</div>
       </div>
       <button class="sq-remove-btn remove-link" data-player-id="${p.id}">Remove</button>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   const available = unassignedPlayers();
 
   const builderHtml = `
@@ -2719,15 +2729,19 @@ function renderAvailablePlayersList(team) {
   const ranked = [...filtered].sort((a, b) => Math.max(b.batting, b.bowling) - Math.max(a.batting, a.bowling));
   listEl.innerHTML = `<div class="add-player-list">${ranked.map(p => {
     const roleLabel = { allrounder: "All-rounder", purebatter: "Pure Batter", keeper: "Wicketkeeper", purebowler: "Pure Bowler" }[p.role || "allrounder"];
-    const batText = p.role === "purebowler" ? "" : `Bat ${p.batting}`;
-    const bowlText = (p.role === "purebatter" || p.role === "keeper") ? "" : `Bowl ${p.bowling}`;
-    const meta = [batText, bowlText].filter(Boolean).join(" · ");
+    const batChip = p.role === "purebowler"
+      ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
+      : skillChipHtml(p.batting, p.battingSkill === "Specialist Batsman", BATTING_SKILL_SHORT[p.battingSkill]);
+    const bowlChip = p.bowlingStyle === "Does Not Bowl"
+      ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
+      : skillChipHtml(p.bowling, p.bowlingSkill === "Specialist Bowler", BOWLING_SKILL_SHORT[p.bowlingSkill]);
     return `
     <div class="add-player-row" data-player-id="${p.id}" role="button" tabindex="0">
       <div class="add-player-info">
         <span class="add-player-name">${p.name}${p.isWicketKeeper ? ` <span class="hint-text" style="font-size:10px;">WK</span>` : ""}</span>
-        <span class="add-player-meta">${meta} · ${roleLabel}</span>
+        <span class="add-player-meta">${roleLabel}</span>
       </div>
+      <div class="add-player-chips">${batChip}${bowlChip}</div>
       <span class="add-player-plus">+</span>
     </div>`;
   }).join("")}</div>`;
