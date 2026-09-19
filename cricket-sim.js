@@ -93,25 +93,31 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
 
   // 2. Batting special skills — deviations from baseline amplified ~1.35x
   // so a named skill actually feels like a real, noticeable trait rather
-  // than a marginal nudge.
+  // than a marginal nudge. Each skill's effect is then scaled by the
+  // batter's own rating: a 95-rated Slogger executes the intent far more
+  // consistently than a 55-rated one attempting the same approach, so
+  // rating and skill both genuinely drive how explosive a player is,
+  // rather than the skill being a flat bonus no matter who has it.
   const earlyPhase = over < totalOvers * 0.3;
   const deathPhase = over >= totalOvers - 4;
+  const skillScale = clamp(batter.batting / 75, 0.6, 1.35);
+  const sc = (mult) => 1 + (mult - 1) * skillScale;
   if (batter.battingSkill === "Compulsive Slogger") {
     // mishits off the middle still often beat the field for a single —
     // this is a low-percentage, high-reward slogger, not a total gambler
-    p[4] *= 1.27; p[6] *= 1.61; p.W *= 1.34; p[0] *= 0.80; p[1] *= 1.14;
+    p[4] *= sc(1.27); p[6] *= sc(1.61); p.W *= sc(1.34); p[0] *= sc(0.80); p[1] *= sc(1.14);
   } else if (batter.battingSkill === "Specialist Batsman") {
     // the premier batting skill — a genuine white-ball specialist, strong
     // across the board with no real trade-off, unlike the situational traits
-    p[0] *= 0.84; p[1] *= 1.07; p[4] *= 1.20; p[6] *= 1.27; p.W *= 0.73;
+    p[0] *= sc(0.84); p[1] *= sc(1.07); p[4] *= sc(1.20); p[6] *= sc(1.27); p.W *= sc(0.73);
   } else if (batter.battingSkill === "Finisher") {
     if (deathPhase) {
-      p[4] *= 1.20; p[6] *= 1.47; p.W *= 1.14; p[0] *= 0.87;
+      p[4] *= sc(1.20); p[6] *= sc(1.47); p.W *= sc(1.14); p[0] *= sc(0.87);
     } else {
       // not their moment yet — actively anchors the innings, rotating
       // strike with 1s and 2s rather than just playing risk-free dots,
       // saving the real aggression for when it actually matters
-      p.W *= 0.80; p[4] *= 0.87; p[6] *= 0.80; p[0] *= 1.03; p[1] *= 1.14; p[2] *= 1.14;
+      p.W *= sc(0.80); p[4] *= sc(0.87); p[6] *= sc(0.80); p[0] *= sc(1.03); p[1] *= sc(1.14); p[2] *= sc(1.14);
     }
   } else if (batter.battingSkill === "Pinch Hitter") {
     // "very inconsistent... very rarely hit... just swing the bat... laga
@@ -120,7 +126,7 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
     // When contact does land, it's a genuine boundary — and the wicket
     // risk stays the highest of any batting skill, since a wild swing
     // that misses clean is also the swing most likely to end the innings.
-    p[4] *= 1.27; p[6] *= 1.54; p.W *= 1.54; p[0] *= 1.15;
+    p[4] *= sc(1.27); p[6] *= sc(1.54); p.W *= sc(1.54); p[0] *= sc(1.15);
   }
 
   // 3. Bowling special skills — same amplification applied
@@ -220,12 +226,13 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   // 6b. Death-overs aggression is universal, not just for batters with a
   // named skill like Finisher — every real batter looks to accelerate
   // in the last few overs regardless of their normal game, since there
-  // are only a handful of balls left to cash in on. This is a modest
-  // baseline that applies to everyone; a skill like Finisher still
-  // stacks its own extra boost on top, so it remains the most explosive
-  // option at the death rather than merely equal to everyone else.
+  // are only a handful of balls left to cash in on. Pushed further than
+  // a token nudge — the death overs should be visibly, unmistakably more
+  // explosive across the board. A skill like Finisher still stacks its
+  // own extra boost on top, so it remains the most explosive option at
+  // the death rather than merely equal to everyone else.
   if (deathPhase) {
-    p[4] *= 1.15; p[6] *= 1.22; p.W *= 1.12; p[0] *= 0.9;
+    p[4] *= 1.35; p[6] *= 1.55; p.W *= 1.10; p[0] *= 0.70;
   }
 
   // 7. Past a half-century, a set batter cashes in — real T20 batters who've
@@ -233,26 +240,6 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   // already proven themselves and can now capitalize while they're in.
   if (batterRunsSoFar != null && batterRunsSoFar >= 50) {
     p[4] *= 1.28; p[6] *= 1.45; p[0] *= 0.82; p.W *= 1.05;
-  }
-
-  // 8. Partnership dynamics — if the partner at the other end is already
-  // scoring quickly (or built for aggression), this batter leans toward
-  // anchoring; if the partner is quiet (or built to anchor), this batter
-  // leans toward keeping the rate ticking instead. A modest complement to
-  // personal skill, not a dominant factor — matches how real batting
-  // orders naturally split into one settled, one accelerating.
-  if (partner) {
-    const partnerAggressive = partner.battingSkill === "Compulsive Slogger" || partner.battingSkill === "Pinch Hitter";
-    const partnerAnchor = partner.battingSkill === "Specialist Batsman";
-    const partnerSR = partner.balls >= 6 ? (partner.runs / partner.balls) * 100 : null;
-    let lean = 0; // +1 = this batter anchors more, -1 = this batter accelerates more
-    if (partnerAggressive || (partnerSR != null && partnerSR >= 145)) lean = 1;
-    else if (partnerAnchor || (partnerSR != null && partnerSR <= 85)) lean = -1;
-    if (lean === 1) {
-      p.W *= 0.93; p[4] *= 0.93; p[6] *= 0.9; p[0] *= 1.05; p[1] *= 1.05;
-    } else if (lean === -1) {
-      p.W *= 1.05; p[4] *= 1.08; p[6] *= 1.1; p[0] *= 0.95;
-    }
   }
 
   // 9. Per-innings "day factor" — some days a lineup just clicks, other
