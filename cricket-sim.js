@@ -114,35 +114,55 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
       p.W *= 0.80; p[4] *= 0.87; p[6] *= 0.80; p[0] *= 1.03; p[1] *= 1.14; p[2] *= 1.14;
     }
   } else if (batter.battingSkill === "Pinch Hitter") {
-    // a lower-order basher, not a powerplay-promotion tactic — real examples
-    // (Starc, Cummins, Shaheen, Shadab) mostly bat in the middle/death overs,
-    // not the powerplay, so this is always-on rather than phase-gated.
-    // Deliberately more boom-or-bust than Compulsive Slogger — "very
-    // inconsistent" — higher wicket risk for a similar boundary payoff.
-    p[4] *= 1.27; p[6] *= 1.54; p.W *= 1.54; p[0] *= 0.76;
+    // "very inconsistent... very rarely hit... just swing the bat... laga
+    // toh six" — this is boom-or-bust weighted toward bust: MORE dots
+    // than a normal batter (most swings don't connect clean), not fewer.
+    // When contact does land, it's a genuine boundary — and the wicket
+    // risk stays the highest of any batting skill, since a wild swing
+    // that misses clean is also the swing most likely to end the innings.
+    p[4] *= 1.27; p[6] *= 1.54; p.W *= 1.54; p[0] *= 1.15;
   }
 
   // 3. Bowling special skills — same amplification applied
   if (bowler.bowlingSkill === "Specialist Bowler") {
     // the premier bowling skill — a genuine white-ball specialist, strong
-    // across the board with no real trade-off
+    // across the board with no real trade-off. Still their sharpest in
+    // the powerplay and at the death — "special in start and death" —
+    // and a real, if slightly less dominant, threat in the middle too
+    // ("can also bowl in middle, still break any partnership").
     p.W *= 1.34; p[0] *= 1.14; p[4] *= 0.84; p[6] *= 0.80;
+    if (earlyPhase || deathPhase) { p.W *= 1.10; }
   } else if (bowler.bowlingSkill === "New Ball Bowler") {
     if (earlyPhase) {
-      p[0] *= 1.20; p.W *= 1.27; p[4] *= 0.80; p[6] *= 0.73;
+      // genuine early-breakthrough threat, but powerplay fielding
+      // restrictions mean they can still go for runs when it doesn't
+      // swing their way — this isn't a risk-free phase for them
+      p[0] *= 1.20; p.W *= 1.27; p[4] *= 0.94; p[6] *= 0.92;
     } else if (deathPhase) {
-      // out of their specialty this late — no fresh-ball swing left to lean on
-      p[4] *= 1.16; p[6] *= 1.20; p.W *= 0.87;
+      // a deliberate death-over recall for reverse swing, not just
+      // "out of their depth" — a real, if secondary, tactic
+      p[4] *= 1.10; p[6] *= 1.14; p.W *= 0.95;
     }
   } else if (bowler.bowlingSkill === "Death/Old Ball Bowler") {
     if (deathPhase) {
       p[4] *= 0.73; p[6] *= 0.66; p.W *= 1.27; p[0] *= 1.14;
+      // a genuine Finisher counters even a death specialist — the
+      // suppression eases (though doesn't vanish) when the batter on
+      // strike is specifically built for exactly this phase
+      if (batter.battingSkill === "Finisher") { p[4] *= 1.25; p[6] *= 1.30; p.W *= 0.90; }
     } else if (earlyPhase) {
       // no fresh-ball movement to exploit this early — their tricks are built for later
       p[4] *= 1.14; p[6] *= 1.14; p.W *= 0.87;
     }
   } else if (bowler.bowlingSkill === "Mystery Spinner" && isSpin(bowler.bowlingStyle)) {
-    if (deathPhase) {
+    const finalOvers = over >= totalOvers - 3; // the specific "trashed" window
+    if (finalOvers) {
+      // "be trashed if bowling in the last 2-3 overs" — a set batter has
+      // seen enough of the variations by now that the trick stops being
+      // a mystery; this leans much harder toward punishment than the
+      // wider death-phase case below
+      p[6] *= 1.65; p[4] *= 1.30; p.W *= 0.85; p[0] *= 0.75;
+    } else if (deathPhase) {
       // if a batter's picked the variation, there's no fallback plan —
       // the trick either lands or it gets punished
       p.W *= 1.07; p[6] *= 1.41; p[4] *= 1.20; p[0] *= 0.87;
@@ -195,6 +215,17 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   }
   if (runRateNeeded != null && currentRunRate != null && runRateNeeded > currentRunRate * 1.4) {
     p[4] *= 1.25; p[6] *= 1.4; p.W *= 1.25; p[0] *= 0.8;
+  }
+
+  // 6b. Death-overs aggression is universal, not just for batters with a
+  // named skill like Finisher — every real batter looks to accelerate
+  // in the last few overs regardless of their normal game, since there
+  // are only a handful of balls left to cash in on. This is a modest
+  // baseline that applies to everyone; a skill like Finisher still
+  // stacks its own extra boost on top, so it remains the most explosive
+  // option at the death rather than merely equal to everyone else.
+  if (deathPhase) {
+    p[4] *= 1.15; p[6] *= 1.22; p.W *= 1.12; p[0] *= 0.9;
   }
 
   // 7. Past a half-century, a set batter cashes in — real T20 batters who've

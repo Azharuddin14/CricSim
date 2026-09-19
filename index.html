@@ -705,7 +705,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-18 · fixed summary modal on Seasons, landscape now top/bottom</p>
+  <p class="app-version-tag">Build 2026-09-19 · skill character rebalance (Pinch Hitter, Death vs Finisher, Mystery Spinner)</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -1031,19 +1031,34 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
     if (deathPhase) { p[4] *= 1.20; p[6] *= 1.47; p.W *= 1.14; p[0] *= 0.87; }
     else { p.W *= 0.80; p[4] *= 0.87; p[6] *= 0.80; p[0] *= 1.03; p[1] *= 1.14; p[2] *= 1.14; }
   }
-  else if (batter.battingSkill === "Pinch Hitter") { p[4] *= 1.27; p[6] *= 1.54; p.W *= 1.54; p[0] *= 0.76; }
+  // "very inconsistent... very rarely hit... just swing the bat... laga
+  // toh six" — boom-or-bust weighted toward bust: MORE dots than a
+  // normal batter, not fewer, since most swings don't connect clean.
+  else if (batter.battingSkill === "Pinch Hitter") { p[4] *= 1.27; p[6] *= 1.54; p.W *= 1.54; p[0] *= 1.15; }
 
-  if (bowler.bowlingSkill === "Specialist Bowler") { p.W *= 1.34; p[0] *= 1.14; p[4] *= 0.84; p[6] *= 0.80; }
+  if (bowler.bowlingSkill === "Specialist Bowler") {
+    // still sharpest in the powerplay and at the death — a real, if
+    // slightly less dominant, threat in the middle too
+    p.W *= 1.34; p[0] *= 1.14; p[4] *= 0.84; p[6] *= 0.80;
+    if (earlyPhase || deathPhase) { p.W *= 1.10; }
+  }
   else if (bowler.bowlingSkill === "New Ball Bowler") {
-    if (earlyPhase) { p[0] *= 1.20; p.W *= 1.27; p[4] *= 0.80; p[6] *= 0.73; }
-    else if (deathPhase) { p[4] *= 1.16; p[6] *= 1.20; p.W *= 0.87; }
+    if (earlyPhase) { p[0] *= 1.20; p.W *= 1.27; p[4] *= 0.94; p[6] *= 0.92; }
+    // a deliberate death-over recall for reverse swing, not just "out of depth"
+    else if (deathPhase) { p[4] *= 1.10; p[6] *= 1.14; p.W *= 0.95; }
   }
   else if (bowler.bowlingSkill === "Death/Old Ball Bowler") {
-    if (deathPhase) { p[4] *= 0.73; p[6] *= 0.66; p.W *= 1.27; p[0] *= 1.14; }
+    if (deathPhase) {
+      p[4] *= 0.73; p[6] *= 0.66; p.W *= 1.27; p[0] *= 1.14;
+      // a genuine Finisher counters even a death specialist
+      if (batter.battingSkill === "Finisher") { p[4] *= 1.25; p[6] *= 1.30; p.W *= 0.90; }
+    }
     else if (earlyPhase) { p[4] *= 1.14; p[6] *= 1.14; p.W *= 0.87; }
   }
   else if (bowler.bowlingSkill === "Mystery Spinner" && isSpinBowler) {
-    if (deathPhase) { p.W *= 1.07; p[6] *= 1.41; p[4] *= 1.20; p[0] *= 0.87; }
+    const finalOvers = over >= totalOvers - 3; // "trashed if bowling in the last 2-3 overs"
+    if (finalOvers) { p[6] *= 1.65; p[4] *= 1.30; p.W *= 0.85; p[0] *= 0.75; }
+    else if (deathPhase) { p.W *= 1.07; p[6] *= 1.41; p[4] *= 1.20; p[0] *= 0.87; }
     else { p.W *= 1.27; p[6] *= 1.14; p[0] *= 1.07; p[4] *= 0.93; }
   }
 
@@ -1083,6 +1098,14 @@ function getBallProbabilities({ batter, bowler, pitch, over, totalOvers, wickets
   if (wicketsDown >= 7) { p[4] *= 0.7; p[6] *= 0.5; p.W *= 0.75; p[0] *= 1.2; p[1] *= 1.1; }
   if (runRateNeeded != null && currentRunRate != null && runRateNeeded > currentRunRate * 1.4) {
     p[4] *= 1.25; p[6] *= 1.4; p.W *= 1.25; p[0] *= 0.8;
+  }
+  // Death-overs aggression is universal, not just for batters with a
+  // named skill like Finisher — every real batter looks to accelerate
+  // in the last few overs. A modest baseline for everyone; Finisher
+  // still stacks its own extra boost on top, staying the most explosive
+  // option rather than merely equal to everyone else.
+  if (deathPhase) {
+    p[4] *= 1.15; p[6] *= 1.22; p.W *= 1.12; p[0] *= 0.9;
   }
   if (batterRunsSoFar != null && batterRunsSoFar >= 50) {
     p[4] *= 1.28; p[6] *= 1.45; p[0] *= 0.82; p.W *= 1.05;
