@@ -239,6 +239,9 @@
   .sq-order-btn:active:not(:disabled) { transform: scale(0.9); }
   .sq-order-btn:disabled { opacity: 0.2; cursor: default; }
   .sq-card-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .sq-card-body-split { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+  .sq-card-body-split .sq-card-name { flex: 1 1 auto; }
+  .sq-card-body-split .sq-card-chips { margin-top: 0; flex-shrink: 0; }
   .sq-card-body-tap { cursor: pointer; }
   .sq-card-body-tap:active { opacity: 0.7; }
   .sq-card-name { color: var(--cream); font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -404,6 +407,7 @@
   .ps-season-list-name { font-family: 'Oswald', sans-serif; font-size: 17px; color: #16213E; }
   .ps-season-list-meta { font-size: 11.5px; color: rgba(22,33,62,0.55); margin-top: 2px; }
   .ps-champion-line { display: flex; align-items: center; gap: 6px; color: #1B4332; font-size: 12.5px; margin-top: 4px; }
+  .ps-runnerup-line { display: flex; align-items: center; gap: 6px; color: rgba(27,67,50,0.65); font-size: 11.5px; margin-top: 2px; }
   .ps-scorecard-btn {
     background: rgba(27,67,50,0.08); border: 1px solid rgba(27,67,50,0.3); color: #1B4332;
     font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 6px; min-height: unset;
@@ -705,7 +709,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-19 · Squad Ledger-style compact cards, tap-to-add/remove</p>
+  <p class="app-version-tag">Build 2026-09-19 · runner-up/semi-finalists shown for seasons</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -2540,30 +2544,35 @@ function renderTeamProfile(teamId) {
     `<div class="ps-record-line"><b>${getTeam(h.oppId)?.name || "Unknown"}</b> <span class="ps-dim">W${h.won} L${h.lost}${h.tied ? ` T${h.tied}` : ""} (${h.played} played)</span></div>`
   ).join("") || `<p class="ps-empty">No knockout matches recorded yet.</p>`;
 
+  function viewOnlyPlayerCardHtml(p, orderNum) {
+    const batChip = p.role === "purebowler"
+      ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
+      : skillChipHtml(p.batting, p.battingSkill === "Specialist Batsman", BATTING_SKILL_SHORT[p.battingSkill]);
+    const bowlChip = p.bowlingStyle === "Does Not Bowl"
+      ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
+      : skillChipHtml(p.bowling, p.bowlingSkill === "Specialist Bowler", BOWLING_SKILL_SHORT[p.bowlingSkill]);
+    return `
+    <div class="sq-player-card sq-player-card-view">
+      ${orderNum != null ? `<div class="sq-order-num">${orderNum}</div>` : ""}
+      <div class="sq-card-body sq-card-body-split">
+        <span class="sq-card-name">${p.name}${p.isWicketKeeper ? ` <span class="hint-text" style="font-size:10px;">WK</span>` : ""}</span>
+        <div class="sq-card-chips">${batChip}${bowlChip}</div>
+      </div>
+    </div>`;
+  }
+
   const startingXI = teamPlayers(team);
   const startingXIHtml = startingXI.length
-    ? `<div class="player-list">${startingXI.map((p, i) => {
-        const batChip = p.role === "purebowler"
-          ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
-          : skillChipHtml(p.batting, p.battingSkill === "Specialist Batsman", BATTING_SKILL_SHORT[p.battingSkill]);
-        const bowlChip = p.bowlingStyle === "Does Not Bowl"
-          ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
-          : skillChipHtml(p.bowling, p.bowlingSkill === "Specialist Bowler", BOWLING_SKILL_SHORT[p.bowlingSkill]);
-        return `
-        <div class="sq-player-card sq-player-card-view">
-          <div class="sq-order-num">${i + 1}</div>
-          <div class="sq-card-body">
-            <span class="sq-card-name">${p.name}${p.isWicketKeeper ? ` <span class="hint-text" style="font-size:10px;">WK</span>` : ""}</span>
-            <div class="sq-card-chips">${batChip}${bowlChip}</div>
-          </div>
-        </div>`;
-      }).join("")}</div>`
+    ? `<div class="player-list">${startingXI.map((p, i) => viewOnlyPlayerCardHtml(p, i + 1)).join("")}</div>`
     : `<p class="ps-empty">No players assigned yet.</p>`;
 
-  const allPlayers = allTimePlayersForTeam(teamId);
-  const allPlayersHtml = allPlayers.length
-    ? `<p class="ps-record-line" style="line-height:1.6;">${allPlayers.join(" · ")}</p>`
-    : `<p class="ps-empty">No recorded appearances yet.</p>`;
+  const currentXiIds = new Set(startingXI.map(p => p.id));
+  const formerSquad = allTimePlayersForTeam(teamId)
+    .map(name => appState.players.find(pl => pl.name === name))
+    .filter(p => p && !currentXiIds.has(p.id));
+  const formerSquadHtml = formerSquad.length
+    ? `<div class="player-list">${formerSquad.map(p => viewOnlyPlayerCardHtml(p, null)).join("")}</div>`
+    : `<p class="ps-empty">No former squad members outside the current XI yet.</p>`;
 
   const content = document.getElementById("teamProfileContent");
   content.innerHTML = `
@@ -2597,8 +2606,8 @@ function renderTeamProfile(teamId) {
       ${startingXIHtml}
     </div>
     <div class="ps-card">
-      <div class="ps-card-title">Players who've played for ${team.name}</div>
-      ${allPlayersHtml}
+      <div class="ps-card-title">Former squad — played for ${team.name} before, not in current XI</div>
+      ${formerSquadHtml}
     </div>`;
   document.getElementById("teamProfileOverlay").style.display = "flex";
 }
@@ -2652,7 +2661,7 @@ function renderTeamsTab() {
         <button class="sq-order-btn move-up-btn" data-idx="${idx}" ${idx === 0 ? "disabled" : ""}>▲</button>
         <button class="sq-order-btn move-down-btn" data-idx="${idx}" ${idx === players.length - 1 ? "disabled" : ""}>▼</button>
       </div>
-      <div class="sq-card-body sq-card-body-tap" data-role="remove" data-player-id="${p.id}">
+      <div class="sq-card-body sq-card-body-split sq-card-body-tap" data-role="remove" data-player-id="${p.id}">
         <span class="sq-card-name">${p.name}${p.isWicketKeeper ? ` <span class="hint-text" style="font-size:10px;">WK</span>` : ""}</span>
         <div class="sq-card-chips">${batChip}${bowlChip}</div>
       </div>
@@ -2828,6 +2837,33 @@ function getWinnerId(match) {
   const r1 = Number(match.score1.runs), r2 = Number(match.score2.runs);
   if (r1 === r2) return match.tieWinnerId || null;
   return r1 > r2 ? match.team1Id : match.team2Id;
+}
+/** Winner, runner-up, and semi-finalists for a season, based purely on
+ * bracket position (last round = final, second-to-last = semis) rather
+ * than round names, so this works regardless of how the user labelled
+ * their rounds. Returns nulls/[] for anything not yet decided. */
+function getSeasonResultsSummary(season) {
+  const rounds = season.knockoutRounds || [];
+  const finalRound = rounds[rounds.length - 1];
+  const finalMatch = finalRound && finalRound.matches[0];
+  const semiRound = rounds.length >= 2 ? rounds[rounds.length - 2] : null;
+
+  let winnerId = null, runnerUpId = null;
+  if (finalMatch && isPlayed(finalMatch)) {
+    winnerId = getWinnerId(finalMatch);
+    runnerUpId = winnerId === finalMatch.team1Id ? finalMatch.team2Id : finalMatch.team1Id;
+  }
+
+  const semiFinalistIds = [];
+  if (semiRound) {
+    semiRound.matches.forEach(m => {
+      if (!isPlayed(m)) return;
+      const w = getWinnerId(m);
+      const loserId = w === m.team1Id ? m.team2Id : m.team1Id;
+      if (loserId != null) semiFinalistIds.push(loserId);
+    });
+  }
+  return { winnerId, runnerUpId, semiFinalistIds };
 }
 /** The team that actually batted first should always display on top —
  * team1/team2 order is just bookkeeping, not the real batting order. */
@@ -3471,10 +3507,10 @@ function renderSeasonsAppHome() {
   const seasonListHtml = appState.seasons.length === 0
     ? `<p class="ps-empty" style="color:rgba(245,239,220,0.5);">No seasons yet — create one above to get started.</p>`
     : appState.seasons.map(s => {
-        const finalRound = s.knockoutRounds[s.knockoutRounds.length - 1];
-        const finalMatch = finalRound && finalRound.matches[0];
-        const championHtml = (finalMatch && isPlayed(finalMatch))
-          ? `<div class="ps-champion-line">🏆 ${getTeam(getWinnerId(finalMatch))?.name || "Tied"}</div>`
+        const results = getSeasonResultsSummary(s);
+        const championHtml = results.winnerId != null
+          ? `<div class="ps-champion-line">🏆 ${getTeam(results.winnerId)?.name || "Tied"}</div>
+             ${results.runnerUpId != null ? `<div class="ps-runnerup-line">🥈 ${getTeam(results.runnerUpId)?.name || "Unknown"}</div>` : ""}`
           : `<div class="ps-dim" style="margin-top:4px; font-style:italic;">In progress</div>`;
         const teamCount = seasonTeamIds(s).length;
         return `
@@ -3616,12 +3652,22 @@ function renderSeasonsAppDetail() {
   let contentHtml;
   if (seasonsDetailTab === "groups") {
     const groupsHtml = season.groups.map(g => renderGroupCard(season, g, pitch, totalOvers)).join("");
+    const results = getSeasonResultsSummary(season);
+    const resultsSummaryHtml = (results.winnerId != null || results.semiFinalistIds.length > 0)
+      ? `<div class="ps-card">
+          <div class="ps-card-title">Knockout Results</div>
+          ${results.winnerId != null ? `<div class="ps-record-line">🏆 Champion — <b>${getTeam(results.winnerId)?.name || "Unknown"}</b></div>` : ""}
+          ${results.runnerUpId != null ? `<div class="ps-record-line">🥈 Runner-up — <b>${getTeam(results.runnerUpId)?.name || "Unknown"}</b></div>` : ""}
+          ${results.semiFinalistIds.length > 0 ? `<div class="ps-record-line">🥉 Semi-finalists — ${results.semiFinalistIds.map(id => getTeam(id)?.name || "Unknown").join(" · ")}</div>` : ""}
+        </div>`
+      : "";
     contentHtml = `
       <div class="ps-card-header-row" style="margin-bottom:12px;">
         <button class="ps-ghost-btn" id="addGroupBtn">+ Add group</button>
       </div>
       ${groupsHtml}
       ${season.groups.length === 0 ? '<p class="ps-empty" style="color:rgba(245,239,220,0.5);">No groups yet — add one above.</p>' : ""}
+      ${resultsSummaryHtml}
     `;
   } else if (seasonsDetailTab === "knockouts") {
     const roundsHtml = season.knockoutRounds.map(r => renderKnockoutRoundCard(season, r, pitch, totalOvers)).join("");
