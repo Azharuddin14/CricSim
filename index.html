@@ -709,7 +709,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-19 · runner-up/semi-finalists shown for seasons</p>
+  <p class="app-version-tag">Build 2026-09-19 · Stats tab now shows knockouts view-only, header shows full results</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -3636,10 +3636,11 @@ function renderSeasonsAppDetail() {
   const defaultGround = getGroundByName(season.groundNames[0]) || allGrounds()[0];
   const pitch = { speed: defaultGround.speed ?? 6, grip: defaultGround.grip ?? 5, bounce: defaultGround.bounce ?? 6, variation: defaultGround.variation ?? 5, deterioration: defaultGround.deterioration ?? 5, __groundName: defaultGround.name };
   const totalOvers = season.oversPerMatch || 20;
-  const finalRound = season.knockoutRounds[season.knockoutRounds.length - 1];
-  const finalMatch = finalRound && finalRound.matches[0];
-  const championHtml = (finalMatch && isPlayed(finalMatch))
-    ? `<div class="ps-champion-line" style="margin-bottom:12px;">🏆 Champion: ${getTeam(getWinnerId(finalMatch))?.name || "Tied"}</div>`
+  const seasonResults = getSeasonResultsSummary(season);
+  const championHtml = seasonResults.winnerId != null
+    ? `<div class="ps-champion-line" style="margin-bottom:4px;">🏆 Champion: ${getTeam(seasonResults.winnerId)?.name || "Tied"}</div>
+       ${seasonResults.runnerUpId != null ? `<div class="ps-runnerup-line" style="margin-bottom:4px;">🥈 Runner-up: ${getTeam(seasonResults.runnerUpId)?.name || "Unknown"}</div>` : ""}
+       ${seasonResults.semiFinalistIds.length > 0 ? `<div class="ps-runnerup-line" style="margin-bottom:12px;">🥉 Semi-finalists: ${seasonResults.semiFinalistIds.map(id => getTeam(id)?.name || "Unknown").join(" · ")}</div>` : ""}`
     : "";
 
   const subtabHtml = `
@@ -3652,22 +3653,12 @@ function renderSeasonsAppDetail() {
   let contentHtml;
   if (seasonsDetailTab === "groups") {
     const groupsHtml = season.groups.map(g => renderGroupCard(season, g, pitch, totalOvers)).join("");
-    const results = getSeasonResultsSummary(season);
-    const resultsSummaryHtml = (results.winnerId != null || results.semiFinalistIds.length > 0)
-      ? `<div class="ps-card">
-          <div class="ps-card-title">Knockout Results</div>
-          ${results.winnerId != null ? `<div class="ps-record-line">🏆 Champion — <b>${getTeam(results.winnerId)?.name || "Unknown"}</b></div>` : ""}
-          ${results.runnerUpId != null ? `<div class="ps-record-line">🥈 Runner-up — <b>${getTeam(results.runnerUpId)?.name || "Unknown"}</b></div>` : ""}
-          ${results.semiFinalistIds.length > 0 ? `<div class="ps-record-line">🥉 Semi-finalists — ${results.semiFinalistIds.map(id => getTeam(id)?.name || "Unknown").join(" · ")}</div>` : ""}
-        </div>`
-      : "";
     contentHtml = `
       <div class="ps-card-header-row" style="margin-bottom:12px;">
         <button class="ps-ghost-btn" id="addGroupBtn">+ Add group</button>
       </div>
       ${groupsHtml}
       ${season.groups.length === 0 ? '<p class="ps-empty" style="color:rgba(245,239,220,0.5);">No groups yet — add one above.</p>' : ""}
-      ${resultsSummaryHtml}
     `;
   } else if (seasonsDetailTab === "knockouts") {
     const roundsHtml = season.knockoutRounds.map(r => renderKnockoutRoundCard(season, r, pitch, totalOvers)).join("");
@@ -3679,6 +3670,25 @@ function renderSeasonsAppDetail() {
       ${season.knockoutRounds.length === 0 ? '<p class="ps-empty" style="color:rgba(245,239,220,0.5);">No knockout rounds yet — add one above.</p>' : ""}
     `;
   } else {
+    // View-only knockout round results — one line per match, no score-entry
+    // or remove controls, since editing happens from the Knockouts tab.
+    const knockoutViewHtml = season.knockoutRounds.length > 0
+      ? `<div class="ps-card">
+          <div class="ps-card-title">Knockouts</div>
+          ${season.knockoutRounds.map(r => {
+            const lines = r.matches.map(m => {
+              const [firstId, secondId] = battingOrderedIds(m);
+              if (!isPlayed(m)) return `<div class="ps-record-line">${getTeam(firstId)?.name || "?"} vs ${getTeam(secondId)?.name || "?"} — <span class="ps-dim">not yet played</span></div>`;
+              const [firstScore, secondScore] = battingOrderedScores(m);
+              const winnerId = getWinnerId(m);
+              const winnerName = winnerId != null ? (getTeam(winnerId)?.name || "?") : null;
+              return `<div class="ps-record-line">${getTeam(firstId)?.name || "?"} ${formatSeasonScore(firstScore)} vs ${getTeam(secondId)?.name || "?"} ${formatSeasonScore(secondScore)}${winnerName ? ` — <b>${winnerName} won</b>` : " — Tied"}</div>`;
+            }).join("");
+            return `<div class="ps-stat-heading" style="margin-top:10px;">${r.name}</div>${lines}`;
+          }).join("")}
+        </div>`
+      : "";
+
     const seasonRecords = seasonPlayedMatchRecords(season);
     const seasonStats = computeAggregateStats(seasonRecords);
     const seasonMomTally = getMomTallyAllMatches(seasonRecords);
@@ -3839,6 +3849,7 @@ function renderSeasonsAppDetail() {
           return `<p class="ps-stat-heading">${g.name}</p><table class="ps-standings-table"><thead><tr><th>#</th><th>Team</th><th class="ps-num-head">P</th><th class="ps-num-head">W</th><th class="ps-num-head">L</th><th class="ps-num-head">T</th><th class="ps-num-head">NRR</th><th class="ps-num-head">Pts</th></tr></thead><tbody>${rows}</tbody></table>`;
         }).join("") || '<p class="ps-empty">No groups yet.</p>'}
       </div>
+      ${knockoutViewHtml}
       <div class="ps-card">
         <div class="ps-card-title">Season Stats</div>
         <div class="ps-stats-grid">
