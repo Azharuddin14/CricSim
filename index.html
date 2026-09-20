@@ -213,14 +213,15 @@
   /* Squad-style player card (numbered badge + up/down order stack) —
      used in Select Teams for the batting-order reorder feature */
   .sq-player-card {
-    display: flex; align-items: center; gap: 12px;
+    display: flex; align-items: center; gap: 10px;
     background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.1)), var(--panel);
-    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; min-height: 46px;
     font-family: 'Inter', sans-serif; font-size: 12.5px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.2);
     transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
   }
   .sq-player-card:hover { border-color: rgba(45,106,79,0.6); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  .sq-player-card-view:hover { border-color: var(--line); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
   .sq-order-num {
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     width: 24px; height: 24px; border-radius: 50%;
@@ -238,6 +239,8 @@
   .sq-order-btn:active:not(:disabled) { transform: scale(0.9); }
   .sq-order-btn:disabled { opacity: 0.2; cursor: default; }
   .sq-card-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .sq-card-body-tap { cursor: pointer; }
+  .sq-card-body-tap:active { opacity: 0.7; }
   .sq-card-name { color: var(--cream); font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sq-card-meta { color: var(--cream-dim); font-size: 10.5px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.01em; }
   .sq-card-chips { display: flex; gap: 6px; margin-top: 3px; }
@@ -248,20 +251,15 @@
   .ground-country-heading:first-of-type { margin-top: 8px; }
   .ground-card .sq-card-body { gap: 3px; }
   .ground-nature { color: var(--cream-dim); font-size: 11.5px; font-family: 'Inter', sans-serif; line-height: 1.4; }
-  .sq-remove-btn {
-    flex-shrink: 0; background: rgba(193,68,60,0.08); border: 1px solid rgba(193,68,60,0.35);
-    color: var(--wicket); font-size: 11px; font-weight: 600; min-height: unset;
-    padding: 6px 12px; border-radius: 6px; transition: all 0.12s;
-  }
-  .sq-remove-btn:hover { background: rgba(193,68,60,0.18); border-color: var(--wicket); filter: none; }
 
   .add-player-section { margin-top: 12px; }
   #addPlayerSearchInput { margin-bottom: 8px; }
   .add-player-list { max-height: 260px; overflow-y: auto; border-radius: 8px; }
   .add-player-row {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    background: rgba(255,255,255,0.03); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px;
+    background: rgba(255,255,255,0.03); border-radius: 9px; padding: 9px 10px; min-height: 46px; margin-bottom: 6px;
     cursor: pointer; transition: background 0.12s;
+    box-sizing: border-box;
   }
   .add-player-row:hover, .add-player-row:active { background: rgba(255,255,255,0.08); }
   .add-player-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
@@ -707,7 +705,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-19 · Select Teams now shows Squad Ledger-style rating/skill chips</p>
+  <p class="app-version-tag">Build 2026-09-19 · Squad Ledger-style compact cards, tap-to-add/remove</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -2544,7 +2542,22 @@ function renderTeamProfile(teamId) {
 
   const startingXI = teamPlayers(team);
   const startingXIHtml = startingXI.length
-    ? startingXI.map((p, i) => `<div class="ps-record-line"><span class="ps-dim">${i + 1}.</span> ${p.name}${p.isWicketKeeper ? " (WK)" : ""}</div>`).join("")
+    ? `<div class="player-list">${startingXI.map((p, i) => {
+        const batChip = p.role === "purebowler"
+          ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
+          : skillChipHtml(p.batting, p.battingSkill === "Specialist Batsman", BATTING_SKILL_SHORT[p.battingSkill]);
+        const bowlChip = p.bowlingStyle === "Does Not Bowl"
+          ? `<span class="chip" style="opacity:0.3;">&mdash;</span>`
+          : skillChipHtml(p.bowling, p.bowlingSkill === "Specialist Bowler", BOWLING_SKILL_SHORT[p.bowlingSkill]);
+        return `
+        <div class="sq-player-card sq-player-card-view">
+          <div class="sq-order-num">${i + 1}</div>
+          <div class="sq-card-body">
+            <span class="sq-card-name">${p.name}${p.isWicketKeeper ? ` <span class="hint-text" style="font-size:10px;">WK</span>` : ""}</span>
+            <div class="sq-card-chips">${batChip}${bowlChip}</div>
+          </div>
+        </div>`;
+      }).join("")}</div>`
     : `<p class="ps-empty">No players assigned yet.</p>`;
 
   const allPlayers = allTimePlayersForTeam(teamId);
@@ -2639,11 +2652,10 @@ function renderTeamsTab() {
         <button class="sq-order-btn move-up-btn" data-idx="${idx}" ${idx === 0 ? "disabled" : ""}>▲</button>
         <button class="sq-order-btn move-down-btn" data-idx="${idx}" ${idx === players.length - 1 ? "disabled" : ""}>▼</button>
       </div>
-      <div class="sq-card-body">
+      <div class="sq-card-body sq-card-body-tap" data-role="remove" data-player-id="${p.id}">
         <span class="sq-card-name">${p.name}${p.isWicketKeeper ? ` <span class="hint-text" style="font-size:10px;">WK</span>` : ""}</span>
         <div class="sq-card-chips">${batChip}${bowlChip}</div>
       </div>
-      <button class="sq-remove-btn remove-link" data-player-id="${p.id}">Remove</button>
     </div>`;
   }).join("");
   const available = unassignedPlayers();
@@ -2691,9 +2703,9 @@ function renderTeamsTab() {
       renderTeamsTab();
     });
   });
-  container.querySelectorAll(".remove-link").forEach(btn => {
-    btn.addEventListener("click", () => {
-      team.playerIds = team.playerIds.filter(id => id !== Number(btn.dataset.playerId));
+  container.querySelectorAll('[data-role="remove"]').forEach(el => {
+    el.addEventListener("click", () => {
+      team.playerIds = team.playerIds.filter(id => id !== Number(el.dataset.playerId));
       renderTeamsTab();
     });
   });
