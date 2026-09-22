@@ -709,7 +709,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-20 · nominate Player of the Tournament, shown with 🧢 on the seasons list</p>
+  <p class="app-version-tag">Build 2026-09-20 · Player of the Tournament now Pitchside-style (name + team, searchable)</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -3478,6 +3478,7 @@ function renderRecordsTab() {
 // ============================================================
 let seasonsAppScreen = "home"; // "home" | "detail"
 let seasonsAppActiveSeasonId = null;
+let seasonsPottEditing = false; // Player of the Tournament: edit vs view mode, Pitchside-style
 let seasonsDetailTab = "groups"; // "groups" | "knockouts" | "stats"
 let seasonsStatsTeamId = null; // which team's filtered records to show in the Stats tab
 
@@ -3512,7 +3513,9 @@ function renderSeasonsAppHome() {
           ? `<div class="ps-champion-line">🏆 ${getTeam(results.winnerId)?.name || "Tied"}</div>
              ${results.runnerUpId != null ? `<div class="ps-runnerup-line">🥈 ${getTeam(results.runnerUpId)?.name || "Unknown"}</div>` : ""}`
           : `<div class="ps-dim" style="margin-top:4px; font-style:italic;">In progress</div>`;
-        const pottHtml = s.playerOfTournament ? `<div class="ps-runnerup-line">\uD83E\uDDE2 ${s.playerOfTournament}</div>` : "";
+        const pottHtml = s.playerOfTournament
+          ? `<div class="ps-runnerup-line">\uD83E\uDDE2 ${s.playerOfTournament.name}${s.playerOfTournament.teamId != null ? ` (${getTeam(s.playerOfTournament.teamId)?.name || "?"})` : ""}</div>`
+          : "";
         const teamCount = seasonTeamIds(s).length;
         return `
         <div class="ps-season-list-card" data-season-id="${s.id}">
@@ -3550,6 +3553,7 @@ function renderSeasonsAppHome() {
       seasonsAppActiveSeasonId = Number(btn.dataset.seasonId);
       seasonsAppScreen = "detail";
       seasonsDetailTab = "groups";
+      seasonsPottEditing = false;
       renderSeasonsApp();
     });
   });
@@ -3563,6 +3567,7 @@ function renderSeasonsAppHome() {
     seasonsAppActiveSeasonId = season.id;
     seasonsAppScreen = "detail";
     seasonsDetailTab = "groups";
+    seasonsPottEditing = false;
     renderSeasonsApp();
   };
 }
@@ -3854,20 +3859,31 @@ function renderSeasonsAppDetail() {
       ${knockoutViewHtml}
       <div class="ps-card">
         <div class="ps-card-title">Player of the Tournament</div>
-        ${season.playerOfTournament
-          ? `<div class="ps-champion-line" style="margin-bottom:10px;">\uD83E\uDDE2 ${season.playerOfTournament}</div>`
-          : `<p class="ps-dim" style="margin:0 0 10px;">Not nominated yet.</p>`}
-        <div class="ps-create-row">
-          <label class="ps-inline-field" style="flex:1 1 220px;">Nominate
-            <select id="pottSelect" class="ps-select" style="width:100%; box-sizing:border-box;">
-              <option value="">&mdash; Not selected &mdash;</option>
-              ${[...new Set([...seasonStats.batting.map(b => b.name), ...seasonStats.bowling.map(b => b.name)])]
-                .sort((a, b) => a.localeCompare(b))
-                .map(name => `<option value="${name}" ${season.playerOfTournament === name ? "selected" : ""}>${name}</option>`).join("")}
-            </select>
-          </label>
-          <button class="ps-ghost-btn" id="pottSaveBtn" style="align-self:flex-end;">Save</button>
-        </div>
+        ${(seasonsPottEditing || !season.playerOfTournament) ? `
+          <div class="ps-create-row">
+            <label class="ps-inline-field" style="flex:1 1 160px;">Player name
+              <input type="text" id="pottNameInput" class="ps-select" style="width:100%; box-sizing:border-box;"
+                value="${season.playerOfTournament ? season.playerOfTournament.name : ""}" placeholder="Player name" list="pottPlayerList" />
+              <datalist id="pottPlayerList">
+                ${[...new Set([...seasonStats.batting.map(b => b.name), ...seasonStats.bowling.map(b => b.name)])]
+                  .sort((a, b) => a.localeCompare(b))
+                  .map(name => `<option value="${name}"></option>`).join("")}
+              </datalist>
+            </label>
+            <label class="ps-inline-field" style="flex:0 0 160px;">Team
+              <select id="pottTeamSelect" class="ps-select" style="width:100%; box-sizing:border-box;">
+                <option value="">No team</option>
+                ${seasonTeamIds(season).map(id => `<option value="${id}" ${season.playerOfTournament && season.playerOfTournament.teamId === id ? "selected" : ""}>${getTeam(id)?.name || "?"}</option>`).join("")}
+              </select>
+            </label>
+            <button class="ps-ghost-btn" id="pottSaveBtn" style="align-self:flex-end;">Save</button>
+          </div>
+        ` : `
+          <div class="ps-card-header-row">
+            <div class="ps-champion-line">\uD83E\uDDE2 ${season.playerOfTournament.name}${season.playerOfTournament.teamId != null ? ` (${getTeam(season.playerOfTournament.teamId)?.name || "?"})` : ""}</div>
+            <button class="ps-ghost-btn" id="pottEditBtn">Edit</button>
+          </div>
+        `}
       </div>
       <div class="ps-card">
         <div class="ps-card-title">Season Stats</div>
@@ -3966,11 +3982,19 @@ function renderSeasonsAppDetail() {
   } else {
     const teamSelect = document.getElementById("seasonStatsTeamSelect");
     if (teamSelect) teamSelect.onchange = () => { seasonsStatsTeamId = Number(teamSelect.value); renderSeasonsAppDetail(); };
-    const pottBtn = document.getElementById("pottSaveBtn");
-    if (pottBtn) pottBtn.onclick = () => {
-      const val = document.getElementById("pottSelect").value;
-      season.playerOfTournament = val || null;
+    const pottSaveBtn = document.getElementById("pottSaveBtn");
+    if (pottSaveBtn) pottSaveBtn.onclick = () => {
+      const name = document.getElementById("pottNameInput").value.trim();
+      if (!name) return;
+      const teamVal = document.getElementById("pottTeamSelect").value;
+      season.playerOfTournament = { name, teamId: teamVal ? Number(teamVal) : null };
+      seasonsPottEditing = false;
       persistState();
+      renderSeasonsAppDetail();
+    };
+    const pottEditBtn = document.getElementById("pottEditBtn");
+    if (pottEditBtn) pottEditBtn.onclick = () => {
+      seasonsPottEditing = true;
       renderSeasonsAppDetail();
     };
   }
