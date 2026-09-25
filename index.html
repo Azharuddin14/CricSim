@@ -709,7 +709,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-20 · Player of the Tournament now Pitchside-style (name + team, searchable)</p>
+  <p class="app-version-tag">Build 2026-09-24 · added Download Players Only for lightweight rating exports</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -896,13 +896,14 @@
     <div class="panel">
       <div class="panel-header-row">
         <h2>Database</h2>
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn-ghost" id="exportDbBtn">Download DB</button>
+          <button class="btn-ghost" id="exportPlayersOnlyBtn">Download Players Only</button>
           <button class="btn-ghost" id="importDbBtn">Restore DB</button>
           <input type="file" id="importDbFile" accept="application/json" style="display:none;" />
         </div>
       </div>
-      <p class="hint-text">Exports every player, team, and saved match as one JSON file. Restoring replaces everything currently loaded.</p>
+      <p class="hint-text">Download DB exports every player, team, and saved match as one JSON file. Restoring replaces everything currently loaded. Download Players Only exports just the player list (ratings/skills) — a much smaller file, meant for importing ratings elsewhere (e.g. Squad Ledger) without also handing over the full match archive.</p>
     </div>
 
     <div class="panel">
@@ -1970,6 +1971,22 @@ async function idbPutAllMatches(matches) {
     });
   } catch (e) {
     console.warn("Could not bulk-save matches to IndexedDB:", e);
+  }
+}
+/** Wipes every match currently in IndexedDB. Used before a full "Restore DB"
+ * so old matches from the session being replaced don't linger alongside
+ * whatever the restored backup contains. */
+async function idbClearMatches() {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).clear();
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.warn("Could not clear matches from IndexedDB:", e);
   }
 }
 
@@ -4311,6 +4328,21 @@ document.getElementById("exportDbBtn").addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
+document.getElementById("exportPlayersOnlyBtn").addEventListener("click", () => {
+  // Just the players array, no teams/matches/seasons/grounds — this is the
+  // file to hand to something like Squad Ledger's rating-import feature,
+  // which only ever reads a top-level "players" array. The full "Download DB"
+  // export includes every saved match (with full ball-by-ball logs), which
+  // can be large enough to crash a consumer that wasn't built to handle it.
+  const blob = new Blob([JSON.stringify({ players: appState.players }, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `matchsim-players-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
 document.getElementById("importDbBtn").addEventListener("click", () => {
   document.getElementById("importDbFile").click();
 });
@@ -4330,7 +4362,16 @@ document.getElementById("importDbFile").addEventListener("change", (e) => {
       const maxId = Math.max(0, ...appState.players.map(p => p.id), ...appState.teams.map(t => t.id), ...appState.matches.map(m => m.id));
       nextId = maxId + 1;
       renderPlayerDb();
-      alert("Database restored.");
+      // Matches live in IndexedDB, not the localStorage-backed appState blob
+      // (see persistState/hydrateMatchesFromIndexedDB), so setting
+      // appState.matches above only fills the CURRENT in-memory session —
+      // without this, the restored matches would vanish on next reload and
+      // any screen that re-reads from IndexedDB (Records, Stats) would show
+      // empty even though Seasons looked fine (season scorecards are
+      // self-contained inside appState.seasons, not sourced from here).
+      idbClearMatches().then(() => idbPutAllMatches(appState.matches)).then(() => {
+        alert("Database restored.");
+      });
     } catch (err) {
       alert("Couldn't read that file: " + err.message);
     }
