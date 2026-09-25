@@ -163,6 +163,8 @@
 
   .panel-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
   .panel-header-row h2 { margin: 0; }
+  .career-sort-label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--cream-dim); }
+  .career-sort-label select { background: #1B4332; color: #F5EFDC; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 13px; }
   .hint-text { font-size: 12px; color: var(--cream-dim); margin: -6px 0 14px; }
   .team-card { background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
   .team-card-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
@@ -709,7 +711,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-24 · added Download Players Only for lightweight rating exports</p>
+  <p class="app-version-tag">Build 2026-09-24 · added HS to Batting Career, MoM to Bowling Career</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -724,6 +726,8 @@
     <button class="tab-btn" data-tab="stats">Stats &amp; History</button>
     <button class="tab-btn" data-tab="records">Records</button>
     <button class="tab-btn" data-tab="grounds">Grounds</button>
+    <button class="tab-btn" data-tab="battingcareer">Batting Career</button>
+    <button class="tab-btn" data-tab="bowlingcareer">Bowling Career</button>
   </div>
 
   <div id="playerdbTab" class="tab-panel active">
@@ -963,6 +967,43 @@
       </div>
       <p class="hint-text">Built-in grounds can't be edited, but you can add your own with custom pitch conditions. Any ground here is selectable when setting up a Quick Match or a Season.</p>
       <div id="groundsList"></div>
+    </div>
+  </div>
+
+  <div id="battingcareerTab" class="tab-panel">
+    <div class="panel">
+      <div class="panel-header-row">
+        <h2>Batting Career</h2>
+        <label class="career-sort-label">Sort by
+          <select id="battingCareerSort">
+            <option value="runs">Runs</option>
+            <option value="avg">Average</option>
+            <option value="sr">Strike Rate</option>
+            <option value="hundreds">100s</option>
+            <option value="fifties">50s</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint-text">Career totals across every recorded match (Friendlies and Seasons combined), ranked by actual performance rather than DB rating.</p>
+      <div id="battingCareerTableWrap"></div>
+    </div>
+  </div>
+
+  <div id="bowlingcareerTab" class="tab-panel">
+    <div class="panel">
+      <div class="panel-header-row">
+        <h2>Bowling Career</h2>
+        <label class="career-sort-label">Sort by
+          <select id="bowlingCareerSort">
+            <option value="wickets">Wickets</option>
+            <option value="econ">Economy</option>
+            <option value="avg">Average</option>
+            <option value="sr">Strike Rate</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint-text">Career totals across every recorded match (Friendlies and Seasons combined), ranked by actual performance rather than DB rating.</p>
+      <div id="bowlingCareerTableWrap"></div>
     </div>
   </div>
 
@@ -2113,6 +2154,8 @@ async function hydrateMatchesFromIndexedDB(legacyMatches) {
   const activeTab = document.querySelector(".tab-btn.active")?.dataset.tab;
   if (activeTab === "stats") renderStatsTab();
   if (activeTab === "records") renderRecordsTab();
+  if (activeTab === "battingcareer") renderBattingCareerTab();
+  if (activeTab === "bowlingcareer") renderBowlingCareerTab();
 }
 
 if (!loadPersistedState()) {
@@ -2138,9 +2181,78 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     if (btn.dataset.tab === "stats") renderStatsTab();
     if (btn.dataset.tab === "records") renderRecordsTab();
     if (btn.dataset.tab === "grounds") renderGroundsTab();
+    if (btn.dataset.tab === "battingcareer") renderBattingCareerTab();
+    if (btn.dataset.tab === "bowlingcareer") renderBowlingCareerTab();
   });
 });
 document.getElementById("recordsSourceFilter").addEventListener("change", () => renderRecordsTab());
+document.getElementById("battingCareerSort").addEventListener("change", () => renderBattingCareerTab());
+document.getElementById("bowlingCareerSort").addEventListener("change", () => renderBowlingCareerTab());
+
+const BATTING_CAREER_SORTERS = {
+  runs: (a, b) => b.runs - a.runs,
+  avg: (a, b) => (b.avg ?? -1) - (a.avg ?? -1),
+  sr: (a, b) => (b.sr ?? -1) - (a.sr ?? -1),
+  hundreds: (a, b) => b.hundreds - a.hundreds,
+  fifties: (a, b) => b.fifties - a.fifties,
+};
+function renderBattingCareerTab() {
+  const stats = computeCareerStats(appState.matches);
+  const sortKey = document.getElementById("battingCareerSort").value;
+  const rows = [...stats.batting]
+    .filter(r => r.innings > 0)
+    .sort((a, b) => BATTING_CAREER_SORTERS[sortKey](a, b) || b.runs - a.runs || a.name.localeCompare(b.name));
+  document.getElementById("battingCareerTableWrap").innerHTML = rows.length === 0
+    ? `<p class="hint-text">No batting performances recorded yet.</p>`
+    : `<table><thead><tr>
+        <th>Player</th><th>M</th><th>I</th><th>Runs</th><th>Avg</th><th>SR</th><th>50s</th><th>100s</th><th>HS</th><th>MoM</th>
+      </tr></thead><tbody>${rows.map(r => `
+        <tr>
+          <td>${r.name}</td>
+          <td class="mono">${r.matches}</td>
+          <td class="mono">${r.innings}</td>
+          <td class="mono">${r.runs}</td>
+          <td class="mono">${r.avg != null ? r.avg.toFixed(1) : "—"}</td>
+          <td class="mono">${r.sr != null ? r.sr.toFixed(1) : "—"}</td>
+          <td class="mono">${r.fifties}</td>
+          <td class="mono">${r.hundreds}</td>
+          <td class="mono">${r.hs}</td>
+          <td class="mono">${r.momCount}</td>
+        </tr>
+      `).join("")}</tbody></table>`;
+}
+
+const BOWLING_CAREER_SORTERS = {
+  wickets: (a, b) => b.wickets - a.wickets,
+  econ: (a, b) => (a.econ ?? Infinity) - (b.econ ?? Infinity),
+  avg: (a, b) => (a.avg ?? Infinity) - (b.avg ?? Infinity),
+  sr: (a, b) => (a.sr ?? Infinity) - (b.sr ?? Infinity),
+};
+function renderBowlingCareerTab() {
+  const stats = computeCareerStats(appState.matches);
+  const sortKey = document.getElementById("bowlingCareerSort").value;
+  const rows = [...stats.bowling]
+    .filter(r => r.innings > 0)
+    .sort((a, b) => BOWLING_CAREER_SORTERS[sortKey](a, b) || b.wickets - a.wickets || a.name.localeCompare(b.name));
+  document.getElementById("bowlingCareerTableWrap").innerHTML = rows.length === 0
+    ? `<p class="hint-text">No bowling performances recorded yet.</p>`
+    : `<table><thead><tr>
+        <th>Player</th><th>M</th><th>I</th><th>Wkt</th><th>Avg</th><th>SR</th><th>BBI</th><th>Econ</th><th>5w</th><th>MoM</th>
+      </tr></thead><tbody>${rows.map(r => `
+        <tr>
+          <td>${r.name}</td>
+          <td class="mono">${r.matches}</td>
+          <td class="mono">${r.innings}</td>
+          <td class="mono">${r.wickets}</td>
+          <td class="mono">${r.avg != null ? r.avg.toFixed(1) : "—"}</td>
+          <td class="mono">${r.sr != null ? r.sr.toFixed(1) : "—"}</td>
+          <td class="mono">${r.bbi}</td>
+          <td class="mono">${r.econ != null ? r.econ.toFixed(2) : "—"}</td>
+          <td class="mono">${r.fiveWicketHauls}</td>
+          <td class="mono">${r.momCount}</td>
+        </tr>
+      `).join("")}</tbody></table>`;
+}
 
 // ---------- shared pitch grid builder ----------
 function buildPitchGridHtml(idSuffix) {
@@ -3230,6 +3342,113 @@ function computeAggregateStats(matches) {
   });
 
   return { batting: [...batting.values()], bowling: [...bowling.values()], keeping: [...keeping.values()] };
+}
+
+/** Converts MatchSim's "quasi-decimal" overs format (e.g. 4.3 = 4 overs and
+ * 3 balls, NOT true decimal 4.3) into a true decimal overs count, so it can
+ * be divided cleanly for economy/strike-rate math. Mirrors the same
+ * technique already used inline for the Records tab's economy column. */
+function oversToTrueDecimal(overs) {
+  return Math.floor(overs) + (overs % 1) * 10 / 6;
+}
+
+/** Whole-career aggregates (across every recorded match, not scoped to any
+ * one team or season) for the Batting Career / Bowling Career tabs — keyed
+ * by player name only, unlike computeAggregateStats which splits the same
+ * player's stats out per team they played for. */
+function computeCareerStats(matches) {
+  const batting = new Map(); // name -> { name, matchIds:Set, innings, runs, balls, dismissals, fifties, hundreds, momCount, hsRuns, hsOut }
+  const bowling = new Map(); // name -> { name, matchIds:Set, innings, wickets, runs, balls, maidens, fiveWicketHauls, bbiWkts, bbiRuns, momCount }
+
+  function batRow(name) {
+    if (!batting.has(name)) batting.set(name, { name, matchIds: new Set(), innings: 0, runs: 0, balls: 0, dismissals: 0, fifties: 0, hundreds: 0, momCount: 0, hsRuns: -1, hsOut: true });
+    return batting.get(name);
+  }
+  function bowlRow(name) {
+    if (!bowling.has(name)) bowling.set(name, { name, matchIds: new Set(), innings: 0, wickets: 0, runs: 0, balls: 0, maidens: 0, fiveWicketHauls: 0, bbiWkts: -1, bbiRuns: 0, momCount: 0 });
+    return bowling.get(name);
+  }
+
+  matches.forEach(m => {
+    const r = m.result;
+    [r.first.battingLog, r.second.battingLog].forEach(log => {
+      log.forEach(b => {
+        const row = batRow(b.name);
+        row.matchIds.add(m.id);
+        if (b.balls > 0) {
+          row.innings++;
+          row.runs += b.runs;
+          row.balls += b.balls;
+          if (b.out) row.dismissals++;
+          if (b.runs >= 100) row.hundreds++;
+          else if (b.runs >= 50) row.fifties++;
+          // Highest score: a bigger knock always wins; on a tie, prefer the
+          // not-out version (matches the usual cricket-stats convention of
+          // showing e.g. "68*" over a plain "68" for the same top score).
+          if (b.runs > row.hsRuns || (b.runs === row.hsRuns && row.hsOut && !b.out)) {
+            row.hsRuns = b.runs;
+            row.hsOut = b.out;
+          }
+        }
+      });
+    });
+    [r.first.bowlingLog, r.second.bowlingLog].forEach(log => {
+      log.forEach(b => {
+        const row = bowlRow(b.name);
+        row.matchIds.add(m.id);
+        if (b.overs > 0) {
+          row.innings++;
+          row.wickets += b.wickets;
+          row.runs += b.runs;
+          row.balls += oversToTrueDecimal(b.overs) * 6;
+          row.maidens += b.maidens || 0;
+          if (b.wickets >= 5) row.fiveWicketHauls++;
+          // Best innings figures: most wickets wins, fewer runs conceded breaks a tie
+          if (b.wickets > row.bbiWkts || (b.wickets === row.bbiWkts && b.runs < row.bbiRuns)) {
+            row.bbiWkts = b.wickets;
+            row.bbiRuns = b.runs;
+          }
+        }
+      });
+    });
+    // MoM is a per-match award, not tied to one discipline — credit it on
+    // whichever career row(s) the recipient actually has (an all-rounder
+    // who batted and bowled in that match picks up the count in both).
+    const motm = r.motm;
+    if (motm) {
+      if (batting.has(motm.name)) batting.get(motm.name).momCount++;
+      if (bowling.has(motm.name)) bowling.get(motm.name).momCount++;
+    }
+  });
+
+  const battingCareer = [...batting.values()].map(row => ({
+    name: row.name,
+    matches: row.matchIds.size,
+    innings: row.innings,
+    runs: row.runs,
+    avg: row.dismissals > 0 ? row.runs / row.dismissals : null,
+    sr: row.balls > 0 ? (row.runs / row.balls) * 100 : null,
+    fifties: row.fifties,
+    hundreds: row.hundreds,
+    hs: row.hsRuns >= 0 ? `${row.hsRuns}${row.hsOut ? "" : "*"}` : "—",
+    hsRuns: row.hsRuns,
+    momCount: row.momCount
+  }));
+
+  const bowlingCareer = [...bowling.values()].map(row => ({
+    name: row.name,
+    matches: row.matchIds.size,
+    innings: row.innings,
+    wickets: row.wickets,
+    avg: row.wickets > 0 ? row.runs / row.wickets : null,
+    sr: row.wickets > 0 ? row.balls / row.wickets : null,
+    econ: row.balls > 0 ? row.runs / (row.balls / 6) : null,
+    bbi: row.bbiWkts >= 0 ? `${row.bbiWkts}/${row.bbiRuns}` : "—",
+    fiveWicketHauls: row.fiveWicketHauls,
+    momCount: row.momCount
+  }));
+
+  return { batting: battingCareer, bowling: bowlingCareer };
 }
 
 function renderStatsTables(stats) {
