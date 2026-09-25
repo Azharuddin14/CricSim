@@ -711,7 +711,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-24 · added HS to Batting Career, MoM to Bowling Career</p>
+  <p class="app-version-tag">Build 2026-09-24 · Career tables get full sort options + name search</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -981,9 +981,14 @@
             <option value="sr">Strike Rate</option>
             <option value="hundreds">100s</option>
             <option value="fifties">50s</option>
+            <option value="hs">Highest Score</option>
+            <option value="matches">Matches</option>
+            <option value="innings">Innings</option>
+            <option value="momCount">MoM</option>
           </select>
         </label>
       </div>
+      <input type="text" id="battingCareerSearchInput" placeholder="Search players by name…" style="margin-bottom:10px;" />
       <p class="hint-text">Career totals across every recorded match (Friendlies and Seasons combined), ranked by actual performance rather than DB rating.</p>
       <div id="battingCareerTableWrap"></div>
     </div>
@@ -999,9 +1004,15 @@
             <option value="econ">Economy</option>
             <option value="avg">Average</option>
             <option value="sr">Strike Rate</option>
+            <option value="bbi">Best Figures</option>
+            <option value="fiveWicketHauls">5w</option>
+            <option value="matches">Matches</option>
+            <option value="innings">Innings</option>
+            <option value="momCount">MoM</option>
           </select>
         </label>
       </div>
+      <input type="text" id="bowlingCareerSearchInput" placeholder="Search players by name…" style="margin-bottom:10px;" />
       <p class="hint-text">Career totals across every recorded match (Friendlies and Seasons combined), ranked by actual performance rather than DB rating.</p>
       <div id="bowlingCareerTableWrap"></div>
     </div>
@@ -2188,6 +2199,8 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
 document.getElementById("recordsSourceFilter").addEventListener("change", () => renderRecordsTab());
 document.getElementById("battingCareerSort").addEventListener("change", () => renderBattingCareerTab());
 document.getElementById("bowlingCareerSort").addEventListener("change", () => renderBowlingCareerTab());
+document.getElementById("battingCareerSearchInput").addEventListener("input", () => renderBattingCareerTab());
+document.getElementById("bowlingCareerSearchInput").addEventListener("input", () => renderBowlingCareerTab());
 
 const BATTING_CAREER_SORTERS = {
   runs: (a, b) => b.runs - a.runs,
@@ -2195,20 +2208,27 @@ const BATTING_CAREER_SORTERS = {
   sr: (a, b) => (b.sr ?? -1) - (a.sr ?? -1),
   hundreds: (a, b) => b.hundreds - a.hundreds,
   fifties: (a, b) => b.fifties - a.fifties,
+  hs: (a, b) => b.hsRuns - a.hsRuns,
+  matches: (a, b) => b.matches - a.matches,
+  innings: (a, b) => b.innings - a.innings,
+  momCount: (a, b) => b.momCount - a.momCount,
 };
 function renderBattingCareerTab() {
   const stats = computeCareerStats(appState.matches);
   const sortKey = document.getElementById("battingCareerSort").value;
+  const query = (document.getElementById("battingCareerSearchInput").value || "").trim().toLowerCase();
   const rows = [...stats.batting]
     .filter(r => r.innings > 0)
+    .filter(r => !query || r.name.toLowerCase().includes(query))
     .sort((a, b) => BATTING_CAREER_SORTERS[sortKey](a, b) || b.runs - a.runs || a.name.localeCompare(b.name));
   document.getElementById("battingCareerTableWrap").innerHTML = rows.length === 0
-    ? `<p class="hint-text">No batting performances recorded yet.</p>`
-    : `<table><thead><tr>
-        <th>Player</th><th>M</th><th>I</th><th>Runs</th><th>Avg</th><th>SR</th><th>50s</th><th>100s</th><th>HS</th><th>MoM</th>
-      </tr></thead><tbody>${rows.map(r => `
+    ? `<p class="hint-text">No batting performances match${query ? " this search" : " yet"}.</p>`
+    : `<div class="players-table-wrap"><table class="players-table"><thead><tr>
+        <th>#</th><th>Player</th><th>M</th><th>I</th><th>Runs</th><th>Avg</th><th>SR</th><th>50s</th><th>100s</th><th>HS</th><th>MoM</th>
+      </tr></thead><tbody>${rows.map((r, idx) => `
         <tr>
-          <td>${r.name}</td>
+          <td class="rank-col">${idx + 1}</td>
+          <td class="name-col">${r.name}</td>
           <td class="mono">${r.matches}</td>
           <td class="mono">${r.innings}</td>
           <td class="mono">${r.runs}</td>
@@ -2219,7 +2239,7 @@ function renderBattingCareerTab() {
           <td class="mono">${r.hs}</td>
           <td class="mono">${r.momCount}</td>
         </tr>
-      `).join("")}</tbody></table>`;
+      `).join("")}</tbody></table></div>`;
 }
 
 const BOWLING_CAREER_SORTERS = {
@@ -2227,20 +2247,28 @@ const BOWLING_CAREER_SORTERS = {
   econ: (a, b) => (a.econ ?? Infinity) - (b.econ ?? Infinity),
   avg: (a, b) => (a.avg ?? Infinity) - (b.avg ?? Infinity),
   sr: (a, b) => (a.sr ?? Infinity) - (b.sr ?? Infinity),
+  bbi: (a, b) => b.bbiWkts - a.bbiWkts || a.bbiRuns - b.bbiRuns,
+  fiveWicketHauls: (a, b) => b.fiveWicketHauls - a.fiveWicketHauls,
+  matches: (a, b) => b.matches - a.matches,
+  innings: (a, b) => b.innings - a.innings,
+  momCount: (a, b) => b.momCount - a.momCount,
 };
 function renderBowlingCareerTab() {
   const stats = computeCareerStats(appState.matches);
   const sortKey = document.getElementById("bowlingCareerSort").value;
+  const query = (document.getElementById("bowlingCareerSearchInput").value || "").trim().toLowerCase();
   const rows = [...stats.bowling]
     .filter(r => r.innings > 0)
+    .filter(r => !query || r.name.toLowerCase().includes(query))
     .sort((a, b) => BOWLING_CAREER_SORTERS[sortKey](a, b) || b.wickets - a.wickets || a.name.localeCompare(b.name));
   document.getElementById("bowlingCareerTableWrap").innerHTML = rows.length === 0
-    ? `<p class="hint-text">No bowling performances recorded yet.</p>`
-    : `<table><thead><tr>
-        <th>Player</th><th>M</th><th>I</th><th>Wkt</th><th>Avg</th><th>SR</th><th>BBI</th><th>Econ</th><th>5w</th><th>MoM</th>
-      </tr></thead><tbody>${rows.map(r => `
+    ? `<p class="hint-text">No bowling performances match${query ? " this search" : " yet"}.</p>`
+    : `<div class="players-table-wrap"><table class="players-table"><thead><tr>
+        <th>#</th><th>Player</th><th>M</th><th>I</th><th>Wkt</th><th>Avg</th><th>SR</th><th>BBI</th><th>Econ</th><th>5w</th><th>MoM</th>
+      </tr></thead><tbody>${rows.map((r, idx) => `
         <tr>
-          <td>${r.name}</td>
+          <td class="rank-col">${idx + 1}</td>
+          <td class="name-col">${r.name}</td>
           <td class="mono">${r.matches}</td>
           <td class="mono">${r.innings}</td>
           <td class="mono">${r.wickets}</td>
@@ -2251,7 +2279,7 @@ function renderBowlingCareerTab() {
           <td class="mono">${r.fiveWicketHauls}</td>
           <td class="mono">${r.momCount}</td>
         </tr>
-      `).join("")}</tbody></table>`;
+      `).join("")}</tbody></table></div>`;
 }
 
 // ---------- shared pitch grid builder ----------
@@ -3444,6 +3472,8 @@ function computeCareerStats(matches) {
     sr: row.wickets > 0 ? row.balls / row.wickets : null,
     econ: row.balls > 0 ? row.runs / (row.balls / 6) : null,
     bbi: row.bbiWkts >= 0 ? `${row.bbiWkts}/${row.bbiRuns}` : "—",
+    bbiWkts: row.bbiWkts,
+    bbiRuns: row.bbiRuns,
     fiveWicketHauls: row.fiveWicketHauls,
     momCount: row.momCount
   }));
