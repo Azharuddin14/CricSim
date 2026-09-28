@@ -724,7 +724,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-28d · Club / National database choice moved to Settings</p>
+  <p class="app-version-tag">Build 2026-09-28e · Restore DB hands players files straight to Import Squads</p>
   <div class="db-indicator" id="dbIndicator"></div>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
@@ -4707,9 +4707,13 @@ document.getElementById("importDbFile").addEventListener("change", (e) => {
     try {
       const data = JSON.parse(reader.result);
       if (!data.players || !data.teams) {
-        alert(Array.isArray(data.players)
-          ? "This is a players/squads file, not a full MatchSim database. Use Import Squads for it — that adds the players without replacing your matches."
-          : "This doesn't look like a valid database file.");
+        if (Array.isArray(data.players)) {
+          // A players/squads file picked with Restore DB: hand it straight to
+          // Import Squads instead of making the user pick it again.
+          if (confirm("This is a players/squads file, not a full MatchSim database.\n\nImport these players now with Import Squads? Your matches, seasons and records are kept.")) openSquadImportFromRaw(data);
+        } else {
+          alert("This doesn't look like a valid database file.");
+        }
         return;
       }
       appState.players = data.players;
@@ -5396,10 +5400,18 @@ document.getElementById("importSquadsFile").addEventListener("change", (e) => {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
-    try {
-      const data = normalizeSquadFile(JSON.parse(reader.result));
+    try { openSquadImportFromRaw(JSON.parse(reader.result)); }
+    catch (err) { alert("Couldn't read that file: " + err.message); }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+
+function openSquadImportFromRaw(raw) {
+  {
+    {
+      const data = normalizeSquadFile(raw);
       if (!data) { alert("This doesn't look like a Squad Ledger squads file."); return; }
-      const raw = JSON.parse(reader.result);
       const looksNational = /nation|international/i.test(raw.source || "");
       if (looksNational && ACTIVE_DB === "club" &&
           !confirm("This is a Squad Ledger national file, but you're in the Club DB. Import into Club anyway?\n\nTap Cancel, switch to 🌍 National DB in Settings, then import there.")) return;
@@ -5408,13 +5420,9 @@ document.getElementById("importSquadsFile").addEventListener("change", (e) => {
       document.getElementById("importSquadsBody").innerHTML = "";
       renderSquadImportModal();
       document.getElementById("importSquadsOverlay").style.display = "flex";
-    } catch (err) {
-      alert("Couldn't read that file: " + err.message);
     }
-  };
-  reader.readAsText(file);
-  e.target.value = "";
-});
+  }
+}
 document.getElementById("confirmImportSquadsBtn").addEventListener("click", applySquadImport);
 document.getElementById("closeImportSquadsBtn").addEventListener("click", () => {
   document.getElementById("importSquadsOverlay").style.display = "none";
