@@ -195,6 +195,7 @@
   }
   .chip .skill { font-weight: 400; opacity: 0.75; font-size: 10.5px; }
   .skill-gold { color: #FFB703 !important; opacity: 1 !important; font-weight: 700; }
+  .skill-white { color: #ffffff !important; opacity: 1 !important; font-weight: 700; }
   .tier-95 { background: linear-gradient(180deg, rgba(255,183,3,0.22), rgba(255,183,3,0.08)); border: 1.5px solid #FFB703; color: #FFB703; }
   .tier-90 { background: linear-gradient(180deg, rgba(207,216,220,0.20), rgba(207,216,220,0.06)); border: 1.5px solid #CFD8DC; color: #CFD8DC; }
   .tier-85 { background: linear-gradient(180deg, rgba(205,138,77,0.22), rgba(205,138,77,0.08)); border: 1.5px solid #CD8A4D; color: #CD8A4D; }
@@ -494,6 +495,11 @@
     box-shadow: 0 12px 40px rgba(0,0,0,0.45);
   }
   .modal-box h2 { font-family: 'Oswald', sans-serif; font-size: 24px; color: var(--amber); margin: 0 0 16px; }
+  .isq-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .isq-row span:last-child { color: var(--cream-dim); text-align: right; }
+  .isq-list { font-size: 12px; color: var(--cream-dim); margin: 6px 0 0; line-height: 1.5; }
+  .isq-check { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; font-size: 13px; margin: 10px 0 4px; }
+  .isq-note { font-size: 12px; color: var(--cream-dim); margin-top: 12px; line-height: 1.5; }
   #playerModalForm { display: flex; flex-direction: column; gap: 12px; }
   #playerModalForm label { font-size: 12px; color: var(--cream-dim); display: flex; flex-direction: column; gap: 4px; }
   .role-radio-group { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -711,7 +717,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-24 · Career tables get full sort options + name search</p>
+  <p class="app-version-tag">Build 2026-09-28 · Storage-full fix (seasons no longer duplicate match history) + Compact History</p>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -812,6 +818,17 @@
     </div>
   </div>
 
+  <div id="importSquadsOverlay" class="modal-overlay">
+    <div class="modal-box" style="max-width:480px;">
+      <h2>Import Squads</h2>
+      <div id="importSquadsBody"></div>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button type="button" class="btn-primary" id="confirmImportSquadsBtn">Import</button>
+        <button type="button" class="btn-ghost" id="closeImportSquadsBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="settingsOverlay" class="modal-overlay">
     <div class="modal-box" style="max-width:440px;">
       <h2>Settings</h2>
@@ -904,10 +921,13 @@
           <button class="btn-ghost" id="exportDbBtn">Download DB</button>
           <button class="btn-ghost" id="exportPlayersOnlyBtn">Download Players Only</button>
           <button class="btn-ghost" id="importDbBtn">Restore DB</button>
+          <button class="btn-primary" id="importSquadsBtn">Import Squads</button>
+          <button class="btn-ghost" id="compactHistoryBtn">Compact History</button>
           <input type="file" id="importDbFile" accept="application/json" style="display:none;" />
+          <input type="file" id="importSquadsFile" accept="application/json" style="display:none;" />
         </div>
       </div>
-      <p class="hint-text">Download DB exports every player, team, and saved match as one JSON file. Restoring replaces everything currently loaded. Download Players Only exports just the player list (ratings/skills) — a much smaller file, meant for importing ratings elsewhere (e.g. Squad Ledger) without also handing over the full match archive.</p>
+      <p class="hint-text">Download DB exports every player, team, and saved match as one JSON file. Restoring replaces everything currently loaded. Download Players Only exports just the player list (ratings/skills) — a much smaller file, meant for importing ratings elsewhere (e.g. Squad Ledger) without also handing over the full match archive. Import Squads loads one era's squads from a Squad Ledger export: players are matched by name and updated in place, so matches, records, career stats and seasons are kept.</p>
     </div>
 
     <div class="panel">
@@ -2078,10 +2098,56 @@ function seasonsForPersist() {
     knockoutRounds: season.knockoutRounds.map(r => ({ ...r, matches: r.matches.map(stripHeavyMatchDetail) })),
   }));
 }
+// A played season fixture's fullResult is the exact same object as its
+// match-history entry (IndexedDB, linked by seasonMatchId). Saving it twice
+// is what filled localStorage, so seasons are saved with a small stub —
+// score lines, margin, MOTM — and the full result is re-attached from match
+// history on load (attachSeasonFullResults).
 function stripHeavyMatchDetail(m) {
   if (!m.fullResult) return m;
-  const strip = inn => inn && { ...inn, timeline: [], oversSummary: [] };
-  return { ...m, fullResult: { ...m.fullResult, first: strip(m.fullResult.first), second: strip(m.fullResult.second) } };
+  const fr = m.fullResult;
+  const slim = inn => inn && {
+    runs: inn.runs, wickets: inn.wickets, oversUsed: inn.oversUsed, extras: inn.extras,
+    extrasByType: inn.extrasByType, scoreText: inn.scoreText,
+    battingLog: [], bowlingLog: [], fallOfWickets: [], timeline: [], oversSummary: [],
+  };
+  return { ...m, fullResult: {
+    _stub: true, margin: fr.margin, superOver: fr.superOver, toss: fr.toss, motm: fr.motm,
+    winnerTeamName: fr.winnerTeamName, firstTeamName: fr.firstTeamName, secondTeamName: fr.secondTeamName,
+    battingFirstIsA: fr.battingFirstIsA, first: slim(fr.first), second: slim(fr.second),
+  } };
+}
+
+function attachSeasonFullResults() {
+  const bySeasonMatch = new Map();
+  (appState.matches || []).forEach(m => { if (m.seasonMatchId != null && m.result) bySeasonMatch.set(m.seasonMatchId, m.result); });
+  (appState.seasons || []).forEach(season => {
+    [...(season.groups || []).flatMap(g => g.matches), ...(season.knockoutRounds || []).flatMap(r => r.matches)].forEach(m => {
+      if (m.fullResult && m.fullResult._stub && bySeasonMatch.has(m.id)) m.fullResult = bySeasonMatch.get(m.id);
+    });
+  });
+}
+
+// Drops the ball-by-ball commentary and over-by-over summaries from older
+// matches. Scorecards, fall of wickets, results, MOTM, records and career
+// stats all stay; only the ball-by-ball section and replay of those matches go.
+async function compactMatchHistory(keepRecent) {
+  const sorted = appState.matches.slice().sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  const keep = new Set(sorted.slice(0, keepRecent).map(m => m.id));
+  const before = JSON.stringify(appState.matches).length;
+  let n = 0;
+  appState.matches.forEach(m => {
+    if (keep.has(m.id) || !m.result) return;
+    ["first", "second"].forEach(k => {
+      const inn = m.result[k];
+      if (inn && ((inn.timeline && inn.timeline.length) || (inn.oversSummary && inn.oversSummary.length))) {
+        inn.timeline = []; inn.oversSummary = []; n++;
+      }
+    });
+  });
+  const after = JSON.stringify(appState.matches).length;
+  await idbPutAllMatches(appState.matches);
+  return { innings: n, savedMB: (before - after) / 1e6 };
 }
 
 function persistState() {
@@ -2150,6 +2216,7 @@ async function hydrateMatchesFromIndexedDB(legacyMatches) {
     // to whatever legacy matches localStorage already had rather than
     // losing them
     appState.matches = legacyMatches;
+    attachSeasonFullResults();
     return;
   }
   if (fromIdb.length === 0 && legacyMatches.length > 0) {
@@ -2159,6 +2226,8 @@ async function hydrateMatchesFromIndexedDB(legacyMatches) {
   } else {
     appState.matches = fromIdb;
   }
+  attachSeasonFullResults();
+  try { if (seasonsAppActiveSeasonId != null) renderSeasonsAppDetail(); } catch (e) {}
   // Match History / Records re-render fresh on every tab switch anyway,
   // but if the user happens to already be sitting on one of them at the
   // exact moment hydration finishes, refresh it so it's not stuck empty.
@@ -2349,15 +2418,17 @@ const BATTING_SKILL_SHORT = { "Specialist Batsman": "T", "Compulsive Slogger": "
 const BOWLING_SKILL_SHORT = { "Specialist Bowler": "W", "New Ball Bowler": "N", "Mystery Spinner": "M", "Death/Old Ball Bowler": "D", "None": "X" };
 const HAND_SHORT = { "Right-handed": "RHB", "Left-handed": "LHB" };
 
+// Colour convention: 90+ gold, 80-89 silver, 70-79 bronze (tier-95/90/85
+// are the gold/silver/bronze chip styles).
 function ratingTierClass(rating) {
-  if (rating >= 95) return "tier-95";
-  if (rating >= 90) return "tier-90";
-  if (rating >= 85) return "tier-85";
+  if (rating >= 90) return "tier-95";
+  if (rating >= 80) return "tier-90";
+  if (rating >= 70) return "tier-85";
   return "";
 }
 function skillChipHtml(rating, isPremiumSkill, shortSkill) {
   if (rating == null) return `<span class="chip" style="opacity:0.3;">&mdash;</span>`;
-  return `<span class="chip ${ratingTierClass(rating)}">${rating}<span class="skill ${isPremiumSkill ? "skill-gold" : ""}">${shortSkill || ""}</span></span>`;
+  return `<span class="chip ${ratingTierClass(rating)}">${rating}<span class="skill ${isPremiumSkill ? "skill-gold" : "skill-white"}">${shortSkill || ""}</span></span>`;
 }
 
 const SEAM_BOWLING_STYLES = ["Right Arm Fast", "Left Arm Fast", "Right Arm Fast Medium", "Left Arm Fast Medium", "Right Arm Medium", "Left Arm Medium"];
@@ -4273,6 +4344,7 @@ function wireScorecardButtons() {
       const allMatches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)];
       const match = allMatches.find(m => m.id === Number(btn.dataset.matchId));
       if (!match || !match.fullResult) return;
+      if (match.fullResult._stub) { alert("This match's full scorecard isn't in match history any more."); return; }
       const content = document.getElementById("seasonScorecardContent");
       const teamA = getTeam(match.team1Id), teamB = getTeam(match.team2Id);
       renderCompleteScorecard(match.fullResult, { firstTeamColor: teamA?.color || "#E63946", secondTeamColor: teamB?.color || "#1D3557" }, content);
@@ -4285,6 +4357,7 @@ function wireScorecardButtons() {
       const allMatches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)];
       const match = allMatches.find(m => m.id === Number(btn.dataset.matchId));
       if (!match || !match.fullResult) return;
+      if (match.fullResult._stub) { alert("This match's full scorecard isn't in match history any more."); return; }
       const teamA = getTeam(match.team1Id), teamB = getTeam(match.team2Id);
       openMatchSummary(match.fullResult, { firstTeamColor: teamA?.color || "#E63946", secondTeamColor: teamB?.color || "#1D3557" }, `${teamA?.name}-vs-${teamB?.name}-summary`);
     };
@@ -4568,7 +4641,9 @@ function wireKnockoutCards(season, pitch, totalOvers) {
 }
 
 document.getElementById("exportDbBtn").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(appState, null, 2)], { type: "application/json" });
+  // Compact JSON, and seasons carry stubs instead of a second copy of every
+  // result (Restore DB re-attaches them from the matches in the same file).
+  const blob = new Blob([JSON.stringify({ ...appState, seasons: seasonsForPersist() })], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -4608,8 +4683,20 @@ document.getElementById("importDbFile").addEventListener("change", (e) => {
       appState.matches = data.matches || [];
       appState.seasons = data.seasons || [];
       appState.grounds = data.grounds || [];
-      const maxId = Math.max(0, ...appState.players.map(p => p.id), ...appState.teams.map(t => t.id), ...appState.matches.map(m => m.id));
+      if (data.settings) appState.settings = { ballsPerSecond: 12, ...data.settings };
+      // Seasons, groups, knockout rounds and season fixtures draw ids from the
+      // same counter, so scan every "id" in the restored data — not just
+      // players/teams/matches — or new items could reuse an existing id.
+      let maxId = 0;
+      (function scan(v) {
+        if (Array.isArray(v)) { v.forEach(scan); return; }
+        if (v && typeof v === "object") {
+          if (typeof v.id === "number" && v.id > maxId) maxId = v.id;
+          Object.values(v).forEach(scan);
+        }
+      })({ players: appState.players, teams: appState.teams, matches: appState.matches, seasons: appState.seasons, grounds: appState.grounds });
       nextId = maxId + 1;
+      attachSeasonFullResults();
       renderPlayerDb();
       // Matches live in IndexedDB, not the localStorage-backed appState blob
       // (see persistState/hydrateMatchesFromIndexedDB), so setting
@@ -5084,6 +5171,197 @@ restoreCurrentMatchIfAny();
  * page was closed or refreshed, show its complete scorecard immediately —
  * nothing is actually lost, since simulation itself is instant and only
  * the ball-by-ball reveal was ever cosmetic. */
+// ============================================================
+// Import Squads (from a Squad Ledger export)
+// ============================================================
+// Loads one era's squads without touching matches, seasons or grounds.
+// Players are matched by exact name and updated in place (same id), so
+// career stats — which are aggregated by name from match logs — carry on.
+let pendingSquadImport = null;
+const SQUAD_PLAYER_FIELDS = ["role", "batting", "bowling", "battingSkill", "bowlingSkill", "battingHand", "bowlingStyle", "isWicketKeeper", "keeping"];
+
+function normalizeSquadFile(data) {
+  if (data && data.format === "squad-ledger-squads" && data.eras && Array.isArray(data.players)) return data;
+  // Older single-era export (players with ids + teams with playerIds)
+  if (data && Array.isArray(data.players) && Array.isArray(data.teams)) {
+    const nameById = {};
+    data.players.forEach(p => { nameById[p.id] = p.name; });
+    return {
+      players: data.players,
+      eras: { [data.era || "File"]: { teams: data.teams.map(t => ({ name: t.name, color: t.color, players: (t.playerIds || []).map(id => nameById[id]).filter(Boolean) })) } },
+    };
+  }
+  return null;
+}
+
+function planSquadImport(data, eraKey, updateRatings) {
+  const teams = (data.eras[eraKey] || {}).teams || [];
+  const fileByName = {};
+  data.players.forEach(p => { if (p && p.name) fileByName[p.name] = p; });
+  const existingByName = {};
+  const duplicateNames = new Set();
+  appState.players.forEach(p => {
+    if (existingByName[p.name]) duplicateNames.add(p.name);
+    else existingByName[p.name] = p;
+  });
+
+  const squadNames = new Set();
+  teams.forEach(t => t.players.forEach(n => squadNames.add(n)));
+  const toAdd = [...squadNames].filter(n => !existingByName[n] && fileByName[n]);
+  const missing = [...squadNames].filter(n => !existingByName[n] && !fileByName[n]);
+
+  const toUpdate = [];
+  if (updateRatings) {
+    Object.keys(fileByName).forEach(n => {
+      const cur = existingByName[n];
+      if (!cur) return;
+      const f = fileByName[n];
+      if (SQUAD_PLAYER_FIELDS.some(k => f[k] !== undefined && String(f[k]) !== String(cur[k]))) toUpdate.push(n);
+    });
+  }
+
+  const teamByName = {};
+  appState.teams.forEach(t => { teamByName[t.name.toLowerCase()] = t; });
+  const teamsUpdated = teams.filter(t => teamByName[t.name.toLowerCase()]).map(t => t.name);
+  const teamsCreated = teams.filter(t => !teamByName[t.name.toLowerCase()]).map(t => t.name);
+
+  // Players who currently sit in a team that isn't the one they're joining.
+  const moves = [];
+  teams.forEach(t => {
+    const target = teamByName[t.name.toLowerCase()];
+    t.players.forEach(n => {
+      const cur = existingByName[n];
+      if (!cur) return;
+      const from = appState.teams.find(tm => tm.playerIds.includes(cur.id));
+      if (from && from !== target) moves.push({ name: n, from: from.name, to: t.name });
+    });
+  });
+  return { teams, fileByName, existingByName, duplicateNames, toAdd, missing, toUpdate, teamsUpdated, teamsCreated, moves };
+}
+
+function renderSquadImportModal() {
+  const data = pendingSquadImport;
+  const eraKeys = Object.keys(data.eras);
+  const body = document.getElementById("importSquadsBody");
+  const sel = document.getElementById("isqEra");
+  const eraKey = sel ? sel.value : eraKeys[eraKeys.length - 1];
+  const upd = document.getElementById("isqUpdate");
+  const updateRatings = upd ? upd.checked : true;
+  const plan = planSquadImport(data, eraKey, updateRatings);
+  const complete = plan.teams.filter(t => t.players.length === 11).length;
+  const shortList = (arr, max = 12) => arr.slice(0, max).join(", ") + (arr.length > max ? ` +${arr.length - max} more` : "");
+
+  body.innerHTML = `
+    <label style="font-size:12px; color:var(--cream-dim); display:flex; flex-direction:column; gap:4px;">Era
+      <select id="isqEra">${eraKeys.map(k => {
+        const ts = data.eras[k].teams;
+        const c = ts.filter(t => t.players.length === 11).length;
+        return `<option value="${k}" ${k === eraKey ? "selected" : ""}>${k} — ${ts.length} team${ts.length === 1 ? "" : "s"} (${c} ready)</option>`;
+      }).join("")}</select>
+    </label>
+    <label class="isq-check"><input type="checkbox" id="isqUpdate" ${updateRatings ? "checked" : ""}> Update ratings/skills of players already in MatchSim</label>
+    <div class="isq-row"><span>Teams</span><span>${plan.teamsUpdated.length} updated · ${plan.teamsCreated.length} new · ${complete}/${plan.teams.length} have 11</span></div>
+    <div class="isq-row"><span>Players updated</span><span>${plan.toUpdate.length}</span></div>
+    <div class="isq-row"><span>New players added</span><span>${plan.toAdd.length}</span></div>
+    <div class="isq-row"><span>Players changing team</span><span>${plan.moves.length}</span></div>
+    ${plan.moves.length ? `<p class="isq-list">${shortList(plan.moves.map(m => `${m.name} (${m.from} → ${m.to})`), 8)}</p>` : ""}
+    ${plan.duplicateNames.size ? `<p class="isq-list" style="color:var(--amber);">Duplicate names in MatchSim (first one is used): ${shortList([...plan.duplicateNames])}</p>` : ""}
+    ${plan.missing.length ? `<p class="isq-list" style="color:var(--amber);">Not in the file, skipped: ${shortList(plan.missing)}</p>` : ""}
+    <p class="isq-note">Matches, records, career stats, seasons and grounds are not touched. Stats follow the player's name, so keep names the same between imports.</p>`;
+  document.getElementById("isqEra").addEventListener("change", renderSquadImportModal);
+  document.getElementById("isqUpdate").addEventListener("change", renderSquadImportModal);
+}
+
+function applySquadImport() {
+  const data = pendingSquadImport;
+  const eraKey = document.getElementById("isqEra").value;
+  const updateRatings = document.getElementById("isqUpdate").checked;
+  const plan = planSquadImport(data, eraKey, updateRatings);
+
+  plan.toUpdate.forEach(n => {
+    const cur = plan.existingByName[n], f = plan.fileByName[n];
+    SQUAD_PLAYER_FIELDS.forEach(k => { if (f[k] !== undefined) cur[k] = f[k]; });
+    if (f.country) cur.country = f.country;
+  });
+  plan.toAdd.forEach(n => {
+    const f = plan.fileByName[n];
+    const p = { id: nextId++, name: n };
+    SQUAD_PLAYER_FIELDS.forEach(k => { p[k] = f[k]; });
+    p.role = p.role || "allrounder";
+    p.battingHand = p.battingHand || "Right-handed";
+    p.bowlingStyle = p.bowlingStyle || "Does Not Bowl";
+    p.batting = Number(p.batting) || 0; p.bowling = Number(p.bowling) || 0;
+    p.isWicketKeeper = !!p.isWicketKeeper; p.keeping = Number(p.keeping) || 0;
+    if (f.country) p.country = f.country;
+    appState.players.push(p);
+    plan.existingByName[n] = p;
+  });
+
+  const teamByName = {};
+  appState.teams.forEach(t => { teamByName[t.name.toLowerCase()] = t; });
+  const targetTeamOf = {};
+  const targets = plan.teams.map(t => {
+    let team = teamByName[t.name.toLowerCase()];
+    if (!team) {
+      team = { id: nextId++, name: t.name, playerIds: [], color: t.color || "#457B9D" };
+      appState.teams.push(team);
+    }
+    const ids = t.players.map(n => plan.existingByName[n]).filter(Boolean).map(p => p.id);
+    ids.forEach(id => { targetTeamOf[id] = team.id; });
+    return { team, ids };
+  });
+  // One player, one team: pull incoming players out of any other team.
+  appState.teams.forEach(t => {
+    t.playerIds = t.playerIds.filter(id => !targetTeamOf[id] || targetTeamOf[id] === t.id);
+  });
+  targets.forEach(({ team, ids }) => { team.playerIds = ids; });
+
+  document.getElementById("importSquadsOverlay").style.display = "none";
+  pendingSquadImport = null;
+  renderPlayerDb(); // also persists
+  try { renderTeamsTab(); } catch (e) {}
+  try { renderQuickMatchTab(); } catch (e) {}
+  alert(`Imported ${eraKey} squads: ${targets.length} teams, ${plan.toAdd.length} new players, ${plan.toUpdate.length} players updated. Match history and career stats are unchanged.`);
+}
+
+document.getElementById("compactHistoryBtn").addEventListener("click", async () => {
+  const keep = 30;
+  if (!confirm(`Remove ball-by-ball commentary from all but your ${keep} most recent matches?\n\nScorecards, results, records and career stats all stay. Only the ball-by-ball section and replay of older matches go. Download DB first if you want a full copy.`)) return;
+  try {
+    const r = await compactMatchHistory(keep);
+    alert(`Compacted ${r.innings} innings — about ${r.savedMB.toFixed(1)} MB smaller.`);
+  } catch (err) {
+    alert("Couldn't compact: " + err.message);
+  }
+});
+
+document.getElementById("importSquadsBtn").addEventListener("click", () => document.getElementById("importSquadsFile").click());
+document.getElementById("importSquadsFile").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = normalizeSquadFile(JSON.parse(reader.result));
+      if (!data) { alert("This doesn't look like a Squad Ledger squads file."); return; }
+      if (!Object.keys(data.eras).length) { alert("This file has no saved squads. Build XIs in Squad Ledger (Nation mode) first."); return; }
+      pendingSquadImport = data;
+      document.getElementById("importSquadsBody").innerHTML = "";
+      renderSquadImportModal();
+      document.getElementById("importSquadsOverlay").style.display = "flex";
+    } catch (err) {
+      alert("Couldn't read that file: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+document.getElementById("confirmImportSquadsBtn").addEventListener("click", applySquadImport);
+document.getElementById("closeImportSquadsBtn").addEventListener("click", () => {
+  document.getElementById("importSquadsOverlay").style.display = "none";
+  pendingSquadImport = null;
+});
+
 function restoreCurrentMatchIfAny() {
   try {
     const raw = localStorage.getItem(CURRENT_MATCH_KEY);
