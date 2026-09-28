@@ -46,6 +46,13 @@
     background: linear-gradient(180deg, rgba(63,107,63,0.18), transparent);
     box-shadow: 0 2px 12px rgba(0,0,0,0.25);
   }
+  .db-indicator { display: inline-block; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; color: var(--amber);
+    border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; margin: 0 0 12px; }
+  .db-switch { display: flex; gap: 2px; padding: 3px; margin: 6px 0 4px; border: 1px solid var(--line); border-radius: 999px; }
+  .db-switch button { flex: 1; }
+  .db-switch button { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; padding: 6px 14px; border: none; border-radius: 999px;
+    background: transparent; color: var(--cream-dim); cursor: pointer; }
+  .db-switch button.active { background: var(--amber); color: #1b1b1b; }
   .app-version-tag {
     font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--amber);
     opacity: 0.75; margin: 2px 0 10px; letter-spacing: 0.02em;
@@ -717,7 +724,8 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-28 · Storage-full fix (seasons no longer duplicate match history) + Compact History</p>
+  <p class="app-version-tag">Build 2026-09-28d · Club / National database choice moved to Settings</p>
+  <div class="db-indicator" id="dbIndicator"></div>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
   <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
@@ -820,7 +828,7 @@
 
   <div id="importSquadsOverlay" class="modal-overlay">
     <div class="modal-box" style="max-width:480px;">
-      <h2>Import Squads</h2>
+      <h2 id="importSquadsTitle">Import Squads</h2>
       <div id="importSquadsBody"></div>
       <div class="modal-actions" style="margin-top:14px;">
         <button type="button" class="btn-primary" id="confirmImportSquadsBtn">Import</button>
@@ -832,6 +840,12 @@
   <div id="settingsOverlay" class="modal-overlay">
     <div class="modal-box" style="max-width:440px;">
       <h2>Settings</h2>
+      <label>Database</label>
+      <div class="db-switch" role="group" aria-label="Database">
+        <button type="button" data-db="club">🏟 Club DB</button>
+        <button type="button" data-db="national">🌍 National DB</button>
+      </div>
+      <p class="hint-text" style="margin:4px 0 14px;">Each database has its own players, teams, matches, seasons, records and careers. Your choice is remembered — the app reopens in the same database after a refresh.</p>
       <label>Balls per second (live playback speed)
         <input type="number" id="settingsBallsPerSecond" min="1" max="30" step="1" />
       </label>
@@ -1958,8 +1972,19 @@ function getGroundByName(name) {
   return allGrounds().find(g => g.name === name) || null;
 }
 
-const STORAGE_KEY = "matchsim_appstate_v1";
-const CURRENT_MATCH_KEY = "matchsim_currentmatch_v1";
+// Separate databases (Club / National), each with its own players, teams,
+// matches, seasons, records and careers. The Club DB keeps the original
+// storage keys, so existing data is untouched; switching reloads the page.
+const ACTIVE_DB_KEY = "matchsim_active_db";
+const MATCHSIM_DBS = {
+  club: { label: "Club", icon: "🏟", suffix: "" },
+  national: { label: "National", icon: "🌍", suffix: "__national" },
+};
+const ACTIVE_DB = (() => {
+  try { const v = localStorage.getItem(ACTIVE_DB_KEY); return MATCHSIM_DBS[v] ? v : "club"; } catch (e) { return "club"; }
+})();
+const STORAGE_KEY = "matchsim_appstate_v1" + MATCHSIM_DBS[ACTIVE_DB].suffix;
+const CURRENT_MATCH_KEY = "matchsim_currentmatch_v1" + MATCHSIM_DBS[ACTIVE_DB].suffix;
 
 /** IndexedDB backing store for match history specifically — the one
  * field that actually grows large (full ball-by-ball detail per match),
@@ -1970,7 +1995,7 @@ const CURRENT_MATCH_KEY = "matchsim_currentmatch_v1";
  * no server; it's just a better-suited API for this amount of data.
  * Everything else (players, teams, seasons, grounds) stays on the
  * existing fast, synchronous localStorage path — only matches move. */
-const IDB_NAME = "matchsim_db";
+const IDB_NAME = "matchsim_db" + MATCHSIM_DBS[ACTIVE_DB].suffix;
 const IDB_STORE = "matches";
 let idbPromise = null;
 function idbOpen() {
@@ -2239,7 +2264,11 @@ async function hydrateMatchesFromIndexedDB(legacyMatches) {
 }
 
 if (!loadPersistedState()) {
-  seedDefaultData();
+  if (ACTIVE_DB === "club") seedDefaultData();
+  else {
+    // A new National DB starts empty — fill it with Import Squads.
+    appState.players = []; appState.teams = []; appState.matches = []; appState.seasons = [];
+  }
   persistState();
 }
 
@@ -4647,7 +4676,7 @@ document.getElementById("exportDbBtn").addEventListener("click", () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `matchsim-db-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `matchsim-${ACTIVE_DB === "club" ? "" : ACTIVE_DB + "-"}db-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
 });
@@ -4677,7 +4706,12 @@ document.getElementById("importDbFile").addEventListener("change", (e) => {
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result);
-      if (!data.players || !data.teams) { alert("This doesn't look like a valid database file."); return; }
+      if (!data.players || !data.teams) {
+        alert(Array.isArray(data.players)
+          ? "This is a players/squads file, not a full MatchSim database. Use Import Squads for it — that adds the players without replacing your matches."
+          : "This doesn't look like a valid database file.");
+        return;
+      }
       appState.players = data.players;
       appState.teams = data.teams;
       appState.matches = data.matches || [];
@@ -5182,6 +5216,9 @@ const SQUAD_PLAYER_FIELDS = ["role", "batting", "bowling", "battingSkill", "bowl
 
 function normalizeSquadFile(data) {
   if (data && data.format === "squad-ledger-squads" && data.eras && Array.isArray(data.players)) return data;
+  // Players-only file (e.g. Squad Ledger's international DB, or Download
+  // Players Only): no squads, just add/update players.
+  if (data && Array.isArray(data.players) && !data.teams && !data.eras) return { players: data.players, eras: {} };
   // Older single-era export (players with ids + teams with playerIds)
   if (data && Array.isArray(data.players) && Array.isArray(data.teams)) {
     const nameById = {};
@@ -5194,8 +5231,9 @@ function normalizeSquadFile(data) {
   return null;
 }
 
-function planSquadImport(data, eraKey, updateRatings) {
-  const teams = (data.eras[eraKey] || {}).teams || [];
+const PLAYERS_ONLY = "__players_only__";
+function planSquadImport(data, eraKey, updateRatings, addAll) {
+  const teams = eraKey === PLAYERS_ONLY ? [] : ((data.eras[eraKey] || {}).teams || []);
   const fileByName = {};
   data.players.forEach(p => { if (p && p.name) fileByName[p.name] = p; });
   const existingByName = {};
@@ -5207,7 +5245,7 @@ function planSquadImport(data, eraKey, updateRatings) {
 
   const squadNames = new Set();
   teams.forEach(t => t.players.forEach(n => squadNames.add(n)));
-  const toAdd = [...squadNames].filter(n => !existingByName[n] && fileByName[n]);
+  const toAdd = (addAll ? Object.keys(fileByName) : [...squadNames]).filter(n => !existingByName[n] && fileByName[n]);
   const missing = [...squadNames].filter(n => !existingByName[n] && !fileByName[n]);
 
   const toUpdate = [];
@@ -5244,22 +5282,25 @@ function renderSquadImportModal() {
   const eraKeys = Object.keys(data.eras);
   const body = document.getElementById("importSquadsBody");
   const sel = document.getElementById("isqEra");
-  const eraKey = sel ? sel.value : eraKeys[eraKeys.length - 1];
+  const eraKey = sel ? sel.value : (eraKeys.length ? eraKeys[eraKeys.length - 1] : PLAYERS_ONLY);
   const upd = document.getElementById("isqUpdate");
   const updateRatings = upd ? upd.checked : true;
-  const plan = planSquadImport(data, eraKey, updateRatings);
+  const all = document.getElementById("isqAddAll");
+  const addAll = all ? all.checked : !eraKeys.length;
+  const plan = planSquadImport(data, eraKey, updateRatings, addAll);
   const complete = plan.teams.filter(t => t.players.length === 11).length;
   const shortList = (arr, max = 12) => arr.slice(0, max).join(", ") + (arr.length > max ? ` +${arr.length - max} more` : "");
 
   body.innerHTML = `
     <label style="font-size:12px; color:var(--cream-dim); display:flex; flex-direction:column; gap:4px;">Era
-      <select id="isqEra">${eraKeys.map(k => {
+      <select id="isqEra"><option value="${PLAYERS_ONLY}" ${eraKey === PLAYERS_ONLY ? "selected" : ""}>Players only — no squad changes</option>${eraKeys.map(k => {
         const ts = data.eras[k].teams;
         const c = ts.filter(t => t.players.length === 11).length;
         return `<option value="${k}" ${k === eraKey ? "selected" : ""}>${k} — ${ts.length} team${ts.length === 1 ? "" : "s"} (${c} ready)</option>`;
       }).join("")}</select>
     </label>
     <label class="isq-check"><input type="checkbox" id="isqUpdate" ${updateRatings ? "checked" : ""}> Update ratings/skills of players already in MatchSim</label>
+    <label class="isq-check"><input type="checkbox" id="isqAddAll" ${addAll ? "checked" : ""}> Add every player in the file (${data.players.length}), not just squad players</label>
     <div class="isq-row"><span>Teams</span><span>${plan.teamsUpdated.length} updated · ${plan.teamsCreated.length} new · ${complete}/${plan.teams.length} have 11</span></div>
     <div class="isq-row"><span>Players updated</span><span>${plan.toUpdate.length}</span></div>
     <div class="isq-row"><span>New players added</span><span>${plan.toAdd.length}</span></div>
@@ -5270,13 +5311,15 @@ function renderSquadImportModal() {
     <p class="isq-note">Matches, records, career stats, seasons and grounds are not touched. Stats follow the player's name, so keep names the same between imports.</p>`;
   document.getElementById("isqEra").addEventListener("change", renderSquadImportModal);
   document.getElementById("isqUpdate").addEventListener("change", renderSquadImportModal);
+  document.getElementById("isqAddAll").addEventListener("change", renderSquadImportModal);
 }
 
 function applySquadImport() {
   const data = pendingSquadImport;
   const eraKey = document.getElementById("isqEra").value;
   const updateRatings = document.getElementById("isqUpdate").checked;
-  const plan = planSquadImport(data, eraKey, updateRatings);
+  const addAll = document.getElementById("isqAddAll").checked;
+  const plan = planSquadImport(data, eraKey, updateRatings, addAll);
 
   plan.toUpdate.forEach(n => {
     const cur = plan.existingByName[n], f = plan.fileByName[n];
@@ -5321,8 +5364,20 @@ function applySquadImport() {
   renderPlayerDb(); // also persists
   try { renderTeamsTab(); } catch (e) {}
   try { renderQuickMatchTab(); } catch (e) {}
-  alert(`Imported ${eraKey} squads: ${targets.length} teams, ${plan.toAdd.length} new players, ${plan.toUpdate.length} players updated. Match history and career stats are unchanged.`);
+  alert(`${eraKey === PLAYERS_ONLY ? "Imported players" : `Imported ${eraKey} squads: ${targets.length} teams`}, ${plan.toAdd.length} new players, ${plan.toUpdate.length} players updated. Match history and career stats are unchanged.`);
 }
+
+document.getElementById("dbIndicator").textContent = `${MATCHSIM_DBS[ACTIVE_DB].icon} ${MATCHSIM_DBS[ACTIVE_DB].label} DB`;
+document.querySelectorAll(".db-switch button").forEach(btn => {
+  btn.classList.toggle("active", btn.dataset.db === ACTIVE_DB);
+  btn.addEventListener("click", () => {
+    if (btn.dataset.db === ACTIVE_DB) return;
+    if (!confirm(`Switch to the ${MATCHSIM_DBS[btn.dataset.db].label} DB? The app will reload.`)) return;
+    persistState();
+    try { localStorage.setItem(ACTIVE_DB_KEY, btn.dataset.db); } catch (e) {}
+    window.location.reload();
+  });
+});
 
 document.getElementById("compactHistoryBtn").addEventListener("click", async () => {
   const keep = 30;
@@ -5344,8 +5399,12 @@ document.getElementById("importSquadsFile").addEventListener("change", (e) => {
     try {
       const data = normalizeSquadFile(JSON.parse(reader.result));
       if (!data) { alert("This doesn't look like a Squad Ledger squads file."); return; }
-      if (!Object.keys(data.eras).length) { alert("This file has no saved squads. Build XIs in Squad Ledger (Nation mode) first."); return; }
+      const raw = JSON.parse(reader.result);
+      const looksNational = /nation|international/i.test(raw.source || "");
+      if (looksNational && ACTIVE_DB === "club" &&
+          !confirm("This is a Squad Ledger national file, but you're in the Club DB. Import into Club anyway?\n\nTap Cancel, switch to 🌍 National DB in Settings, then import there.")) return;
       pendingSquadImport = data;
+      document.getElementById("importSquadsTitle").textContent = `Import into ${MATCHSIM_DBS[ACTIVE_DB].icon} ${MATCHSIM_DBS[ACTIVE_DB].label} DB`;
       document.getElementById("importSquadsBody").innerHTML = "";
       renderSquadImportModal();
       document.getElementById("importSquadsOverlay").style.display = "flex";
