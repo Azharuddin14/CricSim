@@ -718,6 +718,17 @@
   .ball-line { padding: 3px 0; color: var(--cream-dim); }
   .ball-line.over-end-line { color: var(--amber); font-weight: 600; border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 2px; }
   .ball-line.highlight { color: var(--amber); font-weight: 600; }
+  .ball-line.wicket-line { color: #ff5c5c; font-weight: 700; }
+  .ball-line.fifty-line { color: #d9dde3; font-weight: 700; text-shadow: 0 0 6px rgba(217,221,227,0.35); }
+  .ball-line.hundred-line { color: #ffcf33; font-weight: 800; text-shadow: 0 0 8px rgba(255,207,51,0.45); }
+  .live-rate { font-size: 0.82em; font-weight: 600; opacity: 0.9; margin-left: 6px; }
+  .ps-season-sortbar { display: flex; gap: 8px; align-items: center; margin: 4px 0 10px; color: #F5EFDC; font-size: 13px; }
+  .ps-season-sortbar select { flex: 1; }
+  .ps-move-btns { display: flex; flex-direction: column; gap: 4px; margin-right: 8px; }
+  .ps-move-btns button { width: 30px; height: 26px; border-radius: 6px; border: 1px solid rgba(22,33,62,0.25); background: #fff; color: #16213E; font-weight: 700; cursor: pointer; padding: 0; }
+  .ps-move-btns button:disabled { opacity: 0.3; cursor: default; }
+  .ps-archive-head { color: #F5EFDC; font-weight: 700; margin: 18px 0 8px; cursor: pointer; user-select: none; }
+  .ps-season-list-card.archived { opacity: 0.75; }
   .fow .label { color: var(--amber); font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; display: block; margin-bottom: 4px; }
   .notout-tag { color: var(--pitch-light); font-size: 10px; }
 
@@ -730,7 +741,7 @@
 
 <header>
   <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-09-28f · Player DB: ratings sit next to names (long names truncate)</p>
+  <p class="app-version-tag">Build 2026-10-08 · Season sort & archive · colourful live commentary with run rates</p>
   <div class="db-indicator" id="dbIndicator"></div>
   <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
@@ -899,6 +910,10 @@
         <button type="button" class="btn-primary" id="confirmEditSeasonBtn">Save changes</button>
         <button type="button" class="btn-ghost" id="cancelEditSeasonBtn">Cancel</button>
       </div>
+      <div class="modal-actions" style="margin-top:10px;">
+        <button type="button" class="btn-ghost" id="archiveSeasonBtn">Archive season</button>
+      </div>
+      <p class="hint-text" id="archiveSeasonHint" style="margin-top:6px;">Archived seasons move to the Archived section and their matches stop counting in history, records, team stats and player careers. Unarchive any time to bring everything back.</p>
     </div>
   </div>
 
@@ -2318,7 +2333,7 @@ const BATTING_CAREER_SORTERS = {
   momCount: (a, b) => b.momCount - a.momCount,
 };
 function renderBattingCareerTab() {
-  const stats = computeCareerStats(appState.matches);
+  const stats = computeCareerStats(statsMatches());
   const sortKey = document.getElementById("battingCareerSort").value;
   const query = (document.getElementById("battingCareerSearchInput").value || "").trim().toLowerCase();
   const rows = [...stats.batting]
@@ -2358,7 +2373,7 @@ const BOWLING_CAREER_SORTERS = {
   momCount: (a, b) => b.momCount - a.momCount,
 };
 function renderBowlingCareerTab() {
-  const stats = computeCareerStats(appState.matches);
+  const stats = computeCareerStats(statsMatches());
   const sortKey = document.getElementById("bowlingCareerSort").value;
   const query = (document.getElementById("bowlingCareerSearchInput").value || "").trim().toLowerCase();
   const rows = [...stats.bowling]
@@ -3285,7 +3300,7 @@ function rankTeamsByAchievement(teams) {
 function allTimePlayersForTeam(teamId) {
   const team = getTeam(teamId);
   const names = new Set();
-  appState.matches.forEach(m => {
+  statsMatches().forEach(m => {
     const isFirst = m.result.firstTeamName === team?.name;
     const isSecond = m.result.secondTeamName === team?.name;
     if (!isFirst && !isSecond) return;
@@ -3358,7 +3373,7 @@ function playSeasonMatchLive(match, seasonPitch, totalOvers, onDone) {
   overlay.style.display = "flex";
 
   playBackMatch(result, colors, {
-    feedEl, liveLabelEl, liveScoreEl, finalSummaryEl, tossLineEl,
+    feedEl, liveLabelEl, liveScoreEl, finalSummaryEl, tossLineEl, totalOvers,
     onComplete: () => {
       const firstIsTeamA = result.firstTeamName === teamA.name;
       match.battingFirstId = firstIsTeamA ? match.team1Id : match.team2Id;
@@ -3411,6 +3426,29 @@ function simulateSeasonMatch(match, seasonPitch, totalOvers) {
     teamAColor: teamA.color, teamBColor: teamB.color, result, tournamentId: null, source: "season",
     seasonMatchId: match.id,
   });
+}
+
+/** Season-match ids of every archived season. Matches from those seasons
+ * stay saved but are left out of history, records, team stats and careers. */
+function archivedSeasonMatchIds() {
+  const ids = new Set();
+  (appState.seasons || []).filter(s => s.archived).forEach(season => {
+    [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)].forEach(m => ids.add(m.id));
+  });
+  return ids;
+}
+/** The matches that count for stats: everything except archived seasons. */
+function statsMatches() {
+  const archived = archivedSeasonMatchIds();
+  if (!archived.size) return appState.matches;
+  return appState.matches.filter(m => !(m.seasonMatchId != null && archived.has(m.seasonMatchId)));
+}
+/** Last activity in a season: its latest played match, or when it was edited/created. */
+function seasonLastActivity(season) {
+  const ids = new Set([...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)].map(m => m.id));
+  let t = season.updatedAt || season.createdAt || 0;
+  appState.matches.forEach(m => { if (m.seasonMatchId != null && ids.has(m.seasonMatchId) && (m.timestamp || 0) > t) t = m.timestamp; });
+  return t;
 }
 
 function recordMatch({ groundName, teamAName, teamBName, teamAColor, teamBColor, result, tournamentId, source, seasonId, seasonMatchId }) {
@@ -3634,14 +3672,14 @@ function getMatchResultWinner(result) {
 
 function renderStatsTab() {
   persistState();
-  document.getElementById("allTimeStats").innerHTML = renderStatsTables(computeAggregateStats(appState.matches));
+  document.getElementById("allTimeStats").innerHTML = renderStatsTables(computeAggregateStats(statsMatches()));
 
   const historyEl = document.getElementById("matchHistoryList");
-  if (appState.matches.length === 0) {
+  if (statsMatches().length === 0) {
     historyEl.innerHTML = `<p class="hint-text">No matches played yet.</p>`;
     return;
   }
-  const sorted = [...appState.matches].sort((a, b) => b.timestamp - a.timestamp);
+  const sorted = [...statsMatches()].sort((a, b) => b.timestamp - a.timestamp);
   historyEl.innerHTML = sorted.map(m => {
     const mom = m.result.motm ? `${m.result.motm.name} (${m.result.motm.teamName})` : "";
     const sourceLabel = m.source === "season" ? "Season" : "Friendly";
@@ -3806,7 +3844,8 @@ function scoreLine(score) {
 
 function renderRecordsTab() {
   const sourceFilter = document.getElementById("recordsSourceFilter").value;
-  const matches = sourceFilter === "all" ? appState.matches : appState.matches.filter(m => (m.source || "quickmatch") === sourceFilter);
+  const pool = statsMatches();
+  const matches = sourceFilter === "all" ? pool : pool.filter(m => (m.source || "quickmatch") === sourceFilter);
   const empty = `<p class="hint-text">No matches recorded yet.</p>`;
 
   const table = computeAllTimeTable(matches);
@@ -3875,11 +3914,23 @@ function renderSeasonsApp() {
   else renderSeasonsAppDetail();
 }
 
+let seasonsArchiveOpen = false;
+function sortedSeasons(list) {
+  const mode = appState.settings?.seasonSort || "manual";
+  const arr = list.slice();
+  if (mode === "name") arr.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  else if (mode === "name-desc") arr.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
+  else if (mode === "created-new") arr.sort((a, b) => (b.createdAt || b.id) - (a.createdAt || a.id));
+  else if (mode === "created-old") arr.sort((a, b) => (a.createdAt || a.id) - (b.createdAt || b.id));
+  else if (mode === "modified") arr.sort((a, b) => seasonLastActivity(b) - seasonLastActivity(a));
+  return arr;
+}
 function renderSeasonsAppHome() {
   const body = document.getElementById("seasonsAppBody");
-  const seasonListHtml = appState.seasons.length === 0
-    ? `<p class="ps-empty" style="color:rgba(245,239,220,0.5);">No seasons yet — create one above to get started.</p>`
-    : appState.seasons.map(s => {
+  const sortMode = appState.settings?.seasonSort || "manual";
+  const activeSeasons = sortedSeasons(appState.seasons.filter(s => !s.archived));
+  const archivedSeasons = sortedSeasons(appState.seasons.filter(s => s.archived));
+  const cardHtml = (s, idx, total) => {
         const results = getSeasonResultsSummary(s);
         const championHtml = results.winnerId != null
           ? `<div class="ps-champion-line">🏆 ${getTeam(results.winnerId)?.name || "Tied"}</div>
@@ -3889,17 +3940,40 @@ function renderSeasonsAppHome() {
           ? `<div class="ps-runnerup-line">\uD83E\uDDE2 ${s.playerOfTournament.name}${s.playerOfTournament.teamId != null ? ` (${getTeam(s.playerOfTournament.teamId)?.name || "?"})` : ""}</div>`
           : "";
         const teamCount = seasonTeamIds(s).length;
+        const moveHtml = (!s.archived && sortMode === "manual")
+          ? `<div class="ps-move-btns"><button class="season-move-btn" data-dir="-1" data-season-id="${s.id}" ${idx === 0 ? "disabled" : ""} aria-label="Move up">▲</button><button class="season-move-btn" data-dir="1" data-season-id="${s.id}" ${idx === total - 1 ? "disabled" : ""} aria-label="Move down">▼</button></div>`
+          : "";
         return `
-        <div class="ps-season-list-card" data-season-id="${s.id}">
+        <div class="ps-season-list-card${s.archived ? " archived" : ""}" data-season-id="${s.id}">
+          ${moveHtml}
           <div style="flex:1 1 auto; min-width:0;">
             <div class="ps-season-list-name">${s.name}</div>
             <div class="ps-season-list-meta">${s.groups.length} groups · ${teamCount} teams · ${s.oversPerMatch || 20} overs/match</div>
             ${championHtml}
             ${pottHtml}
           </div>
-          <button class="ps-open-season-btn open-season-btn" data-season-id="${s.id}">Open</button>
+          ${s.archived
+            ? `<div style="display:flex; flex-direction:column; gap:6px;"><button class="ps-open-season-btn open-season-btn" data-season-id="${s.id}">Open</button><button class="ps-open-season-btn unarchive-season-btn" data-season-id="${s.id}">Unarchive</button></div>`
+            : `<button class="ps-open-season-btn open-season-btn" data-season-id="${s.id}">Open</button>`}
         </div>`;
-      }).join("");
+  };
+  const seasonListHtml = activeSeasons.length === 0
+    ? `<p class="ps-empty" style="color:rgba(245,239,220,0.5);">${appState.seasons.length ? "All seasons are archived." : "No seasons yet — create one above to get started."}</p>`
+    : activeSeasons.map((s, i) => cardHtml(s, i, activeSeasons.length)).join("");
+  const sortBarHtml = appState.seasons.length > 1 ? `
+    <div class="ps-season-sortbar">Sort
+      <select id="seasonSortSelect" class="ps-select">
+        <option value="manual" ${sortMode === "manual" ? "selected" : ""}>My order (move ▲▼)</option>
+        <option value="name" ${sortMode === "name" ? "selected" : ""}>Name A → Z</option>
+        <option value="name-desc" ${sortMode === "name-desc" ? "selected" : ""}>Name Z → A</option>
+        <option value="created-new" ${sortMode === "created-new" ? "selected" : ""}>Newest created</option>
+        <option value="created-old" ${sortMode === "created-old" ? "selected" : ""}>Oldest created</option>
+        <option value="modified" ${sortMode === "modified" ? "selected" : ""}>Recently modified</option>
+      </select>
+    </div>` : "";
+  const archivedHtml = archivedSeasons.length ? `
+    <div class="ps-archive-head" id="toggleArchivedSeasons">${seasonsArchiveOpen ? "▾" : "▸"} Archived seasons (${archivedSeasons.length}) — not counted in any stats</div>
+    ${seasonsArchiveOpen ? archivedSeasons.map((s, i) => cardHtml(s, i, archivedSeasons.length)).join("") : ""}` : "";
 
   body.innerHTML = `
     <div class="ps-card">
@@ -3917,8 +3991,34 @@ function renderSeasonsAppHome() {
       <div class="tournament-team-checks" id="newSeasonGrounds" style="max-height:180px; overflow-y:auto; color:#16213E;">${allGrounds().map(g => `<label><input type="checkbox" value="${g.name}" /> ${g.name}</label>`).join("")}</div>
       <p class="ps-dim" style="margin-top:8px;">Teams are picked per-group once the season is created, not here.</p>
     </div>
+    ${sortBarHtml}
     ${seasonListHtml}
+    ${archivedHtml}
   `;
+
+  const sortSel = document.getElementById("seasonSortSelect");
+  if (sortSel) sortSel.onchange = () => { appState.settings = { ...(appState.settings || {}), seasonSort: sortSel.value }; persistState(); renderSeasonsAppHome(); };
+  body.querySelectorAll(".season-move-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const list = appState.seasons.filter(s => !s.archived);
+      const i = list.findIndex(s => s.id === Number(btn.dataset.seasonId));
+      const j = i + Number(btn.dataset.dir);
+      if (i < 0 || j < 0 || j >= list.length) return;
+      const a = appState.seasons.indexOf(list[i]), b = appState.seasons.indexOf(list[j]);
+      [appState.seasons[a], appState.seasons[b]] = [appState.seasons[b], appState.seasons[a]];
+      persistState(); renderSeasonsAppHome();
+    });
+  });
+  const archToggle = document.getElementById("toggleArchivedSeasons");
+  if (archToggle) archToggle.onclick = () => { seasonsArchiveOpen = !seasonsArchiveOpen; renderSeasonsAppHome(); };
+  body.querySelectorAll(".unarchive-season-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const season = appState.seasons.find(s => s.id === Number(btn.dataset.seasonId));
+      if (!season) return;
+      season.archived = false; season.updatedAt = Date.now();
+      persistState(); renderSeasonsAppHome();
+    });
+  });
 
   body.querySelectorAll(".open-season-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -3934,7 +4034,7 @@ function renderSeasonsAppHome() {
     const oversPerMatch = Number(document.getElementById("newSeasonOvers").value) || 20;
     const groundNames = [...document.querySelectorAll('#newSeasonGrounds input:checked')].map(c => c.value);
     if (groundNames.length === 0) { alert("Pick at least 1 ground for the season."); return; }
-    const season = { id: nextId++, name, oversPerMatch, groundNames, groups: [], knockoutRounds: [] };
+    const season = { id: nextId++, name, oversPerMatch, groundNames, groups: [], knockoutRounds: [], createdAt: Date.now(), updatedAt: Date.now() };
     appState.seasons.push(season);
     seasonsAppActiveSeasonId = season.id;
     seasonsAppScreen = "detail";
@@ -3963,6 +4063,17 @@ function openEditSeasonModal(season) {
     `<label><input type="checkbox" value="${g.name}" ${season.groundNames.includes(g.name) ? "checked" : ""} /> ${g.name}</label>`).join("");
   modal.style.display = "flex";
   document.getElementById("cancelEditSeasonBtn").onclick = () => { modal.style.display = "none"; };
+  const archBtn = document.getElementById("archiveSeasonBtn");
+  archBtn.textContent = season.archived ? "Unarchive season" : "Archive season";
+  archBtn.onclick = () => {
+    if (!season.archived && !confirm(`Archive "${season.name}"? Its matches will stop counting in history, records, team stats and player careers until you unarchive it.`)) return;
+    season.archived = !season.archived;
+    season.updatedAt = Date.now();
+    persistState();
+    modal.style.display = "none";
+    seasonsAppScreen = "home";
+    renderSeasonsApp();
+  };
   document.getElementById("confirmEditSeasonBtn").onclick = () => {
     const name = document.getElementById("editSeasonName").value.trim();
     const oversPerMatch = Number(document.getElementById("editSeasonOvers").value) || 20;
@@ -3972,6 +4083,7 @@ function openEditSeasonModal(season) {
     season.name = name;
     season.oversPerMatch = oversPerMatch;
     season.groundNames = groundNames;
+    season.updatedAt = Date.now();
     persistState();
     modal.style.display = "none";
     renderSeasonsAppDetail();
@@ -4822,7 +4934,7 @@ document.getElementById("simulateBtn").addEventListener("click", () => {
     console.warn("Could not save the current match:", e);
   }
 
-  playBackMatch(result, teamColors, { matchContext: { teamA: teamPlayers(teamAObj), teamB: teamPlayers(teamBObj), pitch } });
+  playBackMatch(result, teamColors, { totalOvers, matchContext: { teamA: teamPlayers(teamAObj), teamB: teamPlayers(teamBObj), pitch } });
 });
 
 /** Plays the pre-computed match back ball by ball at ~2 overs (12 balls)
@@ -4844,12 +4956,15 @@ function playBackMatch(result, teamColors, opts) {
   ];
 
   let inningsIdx = 0, ballIdx = 0;
+  const allottedOvers = opts.totalOvers || 20;
+  let batterRuns = {}, prevScore = 0, prevWkts = 0;
 
   function step() {
     const inn = innings[inningsIdx];
     if (ballIdx === 0) {
       liveLabel.textContent = inn.label;
       feed.innerHTML = "";
+      batterRuns = {}; prevScore = 0; prevWkts = 0;
       if (tossLineEl) {
         if (inningsIdx === 0) {
           tossLineEl.textContent = `${result.toss.tossWinnerName} won the toss and chose to ${result.toss.decision === "bat" ? "bat" : "bowl"} first.`;
@@ -4885,11 +5000,48 @@ function playBackMatch(result, teamColors, opts) {
     // so counting every entry equally would overstate how far the over has
     // actually gone
     const decimalOvers = (b.over - 1) + (b.ball - 1) / 10;
-    liveScore.textContent = `${b.score}/${b.wickets} (${formatOvers(decimalOvers)})`;
+    // legal balls bowled once this delivery is done (wides / no-balls don't count)
+    const isIllegal = b.extra === "wide" || b.extra === "noball";
+    const legalDone = (b.over - 1) * 6 + b.ball - (isIllegal ? 1 : 0);
+    const oversDone = Math.floor(legalDone / 6) + (legalDone % 6) / 10;
+    let rateText = "";
+    if (inningsIdx === 0) {
+      const crr = legalDone ? (b.score * 6 / legalDone) : 0;
+      rateText = `RR ${crr.toFixed(2)}`;
+    } else {
+      const target = result.first.runs + 1;
+      const need = Math.max(0, target - b.score);
+      const ballsLeft = Math.max(0, allottedOvers * 6 - legalDone);
+      const rrr = ballsLeft ? (need * 6 / ballsLeft) : 0;
+      rateText = need > 0 ? `Need ${need} off ${ballsLeft} ball${ballsLeft === 1 ? "" : "s"} · RRR ${rrr.toFixed(2)}` : "Target reached";
+    }
+    liveScore.innerHTML = `${b.score}/${b.wickets} (${formatOvers(oversDone)}) <span class="live-rate">${rateText}</span>`;
+    // who scored what off this ball, for 50 / 100 milestones
+    const delta = b.score - prevScore;
+    let toBatter = delta;
+    if (b.extra === "wide" || b.extra === "bye") toBatter = 0;
+    else if (b.extra === "noball") toBatter = Math.max(0, delta - 1);
+    const before = batterRuns[b.batterName] || 0;
+    const after = before + toBatter;
+    batterRuns[b.batterName] = after;
+    const isWicket = b.wickets > prevWkts;
+    prevScore = b.score; prevWkts = b.wickets;
     const line = document.createElement("div");
-    line.className = "ball-line" + (b.commentary.includes("!") ? " highlight" : "");
+    let cls = "ball-line";
+    if (isWicket) cls += " wicket-line";
+    else if (before < 100 && after >= 100) cls += " hundred-line";
+    else if (before < 50 && after >= 50) cls += " fifty-line";
+    else if (b.commentary.includes("!")) cls += " highlight";
+    line.className = cls;
     line.textContent = `${b.over - 1}.${b.ball}  ${b.commentary}`;
     feed.prepend(line);
+    if (!isWicket && before < 100 && after >= 100) {
+      const m = document.createElement("div"); m.className = "ball-line hundred-line";
+      m.textContent = `🥇 HUNDRED! ${b.batterName} reaches ${after}`; feed.prepend(m);
+    } else if (!isWicket && before < 50 && after >= 50) {
+      const m = document.createElement("div"); m.className = "ball-line fifty-line";
+      m.textContent = `🥈 FIFTY! ${b.batterName} reaches ${after}`; feed.prepend(m);
+    }
     const next = inn.timeline[ballIdx + 1];
     const isLastOfOver = !next || next.over !== b.over;
     if (isLastOfOver) {
