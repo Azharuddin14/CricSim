@@ -701,6 +701,8 @@
   .bbb-details summary { cursor: pointer; font-size: 12px; color: var(--pitch-light); font-weight: 600; }
   .bbb-list { max-height: 260px; overflow-y: auto; margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cream-dim); border-top: 1px solid var(--line); padding-top: 8px; }
   .bbb-line { padding: 2px 0; }
+  .bbb-line.bbb-wicket { color: #e5484d; font-weight: 700; }
+  .bbb-line.bbb-milestone { font-weight: 800; color: #1f9d6b; }
   .bbb-over-summary {
     padding: 6px 8px; margin: 4px 0 8px; background: rgba(242,193,78,0.08);
     border-left: 2px solid var(--amber); color: var(--cream); font-weight: 600;
@@ -717,11 +719,40 @@
   }
   .ball-line { padding: 3px 0; color: var(--cream-dim); }
   .ball-line.over-end-line { color: var(--amber); font-weight: 600; border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 2px; }
+  .live-sum-wrap { margin-top: 10px; }
+  .live-sum-body { margin-top: 8px; max-height: 460px; overflow-y: auto; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; color: var(--cream); font-family: 'Inter', sans-serif; font-size: 13px; }
+  .sum-divider { border-top: 1px dashed var(--line); margin: 12px 0 8px; }
+  .sum-first { color: var(--cream-dim); font-size: 12px; margin-bottom: 4px; }
+  .sum-head { font-weight: 800; color: var(--amber); margin-bottom: 6px; }
+  .sum-table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 12.5px; }
+  .sum-table th { text-align: right; color: var(--cream-dim); font-weight: 600; padding: 3px 4px; border-bottom: 1px solid var(--line); }
+  .sum-table td { text-align: right; padding: 3px 4px; }
+  .sum-table th:first-child, .sum-table td:first-child { text-align: left; }
+  .sum-table tr.is-out td { color: var(--cream-dim); }
+  .sum-table tr.is-in td:first-child { color: #3ddc97; font-weight: 700; }
+  .sum-proj, .sum-need { border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 4px; line-height: 1.6; }
+  .sum-need { font-size: 15px; color: var(--cream); }
+  .sum-need b, .sum-proj b { color: var(--amber); }
+  .first-inns-wrap { margin-top: 10px; }
+  .first-inns-btn { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--amber); font-family: 'Inter', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .first-inns-body { margin-top: 8px; max-height: 420px; overflow-y: auto; background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; color: var(--cream-dim); font-family: 'JetBrains Mono', monospace; font-size: 12.5px; }
+  .live-tabs { display: flex; gap: 6px; padding: 8px 0; flex-wrap: wrap; }
+  .live-tab { flex: 1 1 0; min-width: 0; padding: 9px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--cream-dim); font-family: 'Inter', sans-serif; font-weight: 700; font-size: 12.5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .live-tab.active { background: var(--amber); color: #1b1b1b; border-color: var(--amber); }
+  .live-panel { font-family: 'Inter', sans-serif; }
+  .live-panel .bbb-details > summary { display: none; }
+  .pause-hint { text-align: center; font-family: 'Inter', sans-serif; font-size: 11px; color: var(--cream-dim); padding: 4px 0; user-select: none; }
+  .pause-hint.is-paused { color: #ffcf33; font-weight: 700; font-size: 13px; }
+  .live-scoreboard { touch-action: manipulation; -webkit-user-select: none; user-select: none; cursor: pointer; }
+  .commentary-feed { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   .ball-line.highlight { color: var(--amber); font-weight: 600; }
   .ball-line.wicket-line { color: #ff5c5c; font-weight: 700; }
   .ball-line.fifty-line { color: #d9dde3; font-weight: 700; text-shadow: 0 0 6px rgba(217,221,227,0.35); }
   .ball-line.hundred-line { color: #ffcf33; font-weight: 800; text-shadow: 0 0 8px rgba(255,207,51,0.45); }
-  .live-rate { font-size: 0.82em; font-weight: 600; opacity: 0.9; margin-left: 6px; }
+  .live-score .live-main { font-size: 44px; line-height: 1.05; }
+  .live-score .live-small { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; color: var(--cream-dim); letter-spacing: 0.04em; margin-top: 6px; }
+  .live-score .live-mid { font-family: 'Inter', sans-serif; font-size: 17px; font-weight: 700; color: var(--cream); margin-top: 4px; }
+  .ball-line.milestone-line { font-weight: 800; background: linear-gradient(90deg, #2ecc71, #f1c40f); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .ps-season-sortbar { display: flex; gap: 8px; align-items: center; margin: 4px 0 10px; color: #F5EFDC; font-size: 13px; }
   .ps-season-sortbar select { flex: 1; }
   .ps-move-btns { display: flex; flex-direction: column; gap: 4px; margin-right: 8px; }
@@ -732,6 +763,47 @@
   .fow .label { color: var(--amber); font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; display: block; margin-bottom: 4px; }
   .notout-tag { color: var(--pitch-light); font-size: 10px; }
 
+
+  /* ===== UI polish (2026-10-08i) ===== */
+  header { padding: 18px 16px 14px; }
+  .header-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .header-top h1 { font-size: 34px; line-height: 1; }
+  .header-top .db-indicator { margin: 0; white-space: nowrap; }
+  .app-version-tag { margin: 6px 0 4px; font-size: 10px; opacity: 0.6; }
+  .header-blurb { font-size: 13px !important; }
+  @media (max-width: 700px) { .header-blurb { display: none; } }
+  .launch-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; max-width: 520px; }
+  .launch-row .seasons-launch-btn { margin: 0; padding: 11px 6px; min-height: 46px; border-radius: 10px; font-family: 'Inter', sans-serif;
+    font-size: 14px; font-weight: 700; letter-spacing: 0; border: none; white-space: nowrap; }
+  .launch-row .launch-friendlies { background: #1B4332; color: #F5EFDC; border: 1px solid var(--line); }
+  .launch-row .launch-friendlies.active { background: #2D6A4F; color: #fff; border-color: var(--pitch-light); }
+  .launch-row .launch-settings { background: transparent; border: 1px solid var(--line); color: var(--cream-dim); }
+
+  main { padding: 14px 14px 60px; }
+  .tab-nav { position: sticky; top: 0; z-index: 20; background: #10281f; margin: 0 -14px 16px; padding: 4px 10px 0;
+    scrollbar-width: none; box-shadow: 0 6px 10px -8px rgba(0,0,0,0.6); }
+  .tab-nav::-webkit-scrollbar { display: none; }
+  .tab-btn { font-size: 16px; padding: 10px 12px 11px; min-height: 42px; }
+
+  .panel { padding: 16px; border-radius: 12px; }
+  .panel h2 { font-size: 20px; }
+  .panel-header-row { flex-wrap: wrap; gap: 10px; }
+  .panel-header-row > h2 { flex: 1 1 auto; }
+  #statsTab .panel-header-row > div { width: 100%; display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #statsTab .panel-header-row > div > button { width: 100%; }
+
+  .live-scoreboard { scroll-margin-top: 60px; }
+  .db-help summary { cursor: pointer; color: var(--cream-dim); font-size: 12.5px; margin-top: 4px; }
+  #simulateBtn { width: 100%; padding: 14px; font-size: 16px; border-radius: 10px; background: var(--amber); color: #1b1b1b; border: none; font-weight: 800; }
+  .pitch-grid { gap: 12px 16px; }
+
+  /* seasons */
+  .ps-summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .ps-summary-stat { min-width: 0; }
+  .ps-summary-stat span { font-size: 10px; }
+  .ps-new-season-toggle { width: 100%; margin-bottom: 14px; padding: 13px; border-radius: 10px; border: 1px dashed rgba(245,239,220,0.4);
+    background: rgba(245,239,220,0.06); color: #F5EFDC; font-weight: 700; font-size: 15px; cursor: pointer; }
+  #addGroupBtn { background: rgba(245,239,220,0.1); color: #F5EFDC; border-color: rgba(245,239,220,0.35); font-size: 13px; padding: 9px 14px; }
   footer { text-align: center; color: var(--cream-dim); font-size: 12px; padding: 20px; }
   footer a { color: var(--pitch-light); }
 </style>
@@ -740,13 +812,15 @@
 <body>
 
 <header>
-  <h1>MATCH<span>SIM</span></h1>
-  <p class="app-version-tag">Build 2026-10-08 · Season sort & archive · colourful live commentary with run rates</p>
+  <div class="header-top"><h1>MATCH<span>SIM</span></h1></div>
+  <p class="app-version-tag">Build 2026-10-08i · UI polish: compact header, sticky tabs, tidier seasons and database panels</p>
   <div class="db-indicator" id="dbIndicator"></div>
-  <p>An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
-  <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
-  <button class="seasons-launch-btn tab-btn" data-tab="quickmatch" style="background:#1B4332; color:#F5EFDC;">🎾 Friendlies</button>
-  <button class="seasons-launch-btn" id="openSettingsBtn" style="background:transparent; border:1px solid var(--line); color:var(--cream-dim);">⚙ Settings</button>
+  <p class="header-blurb">An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
+  <div class="launch-row">
+    <button class="seasons-launch-btn" id="openSeasonsAppBtn">🏆 Seasons</button>
+    <button class="seasons-launch-btn tab-btn launch-friendlies" data-tab="quickmatch">🎾 Friendlies</button>
+    <button class="seasons-launch-btn launch-settings" id="openSettingsBtn">⚙ Settings</button>
+  </div>
 </header>
 
 <main>
@@ -962,7 +1036,7 @@
           <input type="file" id="importSquadsFile" accept="application/json" style="display:none;" />
         </div>
       </div>
-      <p class="hint-text">Download DB exports every player, team, and saved match as one JSON file. Restoring replaces everything currently loaded. Download Players Only exports just the player list (ratings/skills) — a much smaller file, meant for importing ratings elsewhere (e.g. Squad Ledger) without also handing over the full match archive. Import Squads loads one era's squads from a Squad Ledger export: players are matched by name and updated in place, so matches, records, career stats and seasons are kept.</p>
+      <details class="db-help"><summary>What do these buttons do?</summary><p class="hint-text" style="margin:8px 0 0;">Download DB exports every player, team, and saved match as one JSON file. Restoring replaces everything currently loaded. Download Players Only exports just the player list (ratings/skills) — a much smaller file, meant for importing ratings elsewhere (e.g. Squad Ledger) without also handing over the full match archive. Import Squads loads one era's squads from a Squad Ledger export: players are matched by name and updated in place, so matches, records, career stats and seasons are kept.</p></details>
     </div>
 
     <div class="panel">
@@ -1855,12 +1929,22 @@ function renderOverSummaryLine(s) {
 function renderFullBallByBall(timeline, oversSummary) {
   if (!timeline || timeline.length === 0) return "";
   const summaryByOver = new Map((oversSummary || []).map(s => [s.over, s]));
+  const runsBy = {}, ballsBy = {}; let prevScore = 0, prevWkts = 0;
   const rows = timeline.map((b, i) => {
     // ball notation follows the real cricket convention — 0.1 is the
     // first ball of the innings (completed overs so far, not an
     // ordinal), so the over shown here is one less than b.over's
     // internal 1-indexed value
-    let html = `<div class="bbb-line">${b.over - 1}.${b.ball} — ${b.commentary}</div>`;
+    const delta = b.score - prevScore;
+    let toBatter = (b.extra === "wide" || b.extra === "bye") ? 0 : b.extra === "noball" ? Math.max(0, delta - 1) : delta;
+    const before = runsBy[b.batterName] || 0, after = before + toBatter;
+    runsBy[b.batterName] = after;
+    if (b.extra !== "wide" && b.extra !== "noball") ballsBy[b.batterName] = (ballsBy[b.batterName] || 0) + 1;
+    const isWicket = b.wickets > prevWkts;
+    prevScore = b.score; prevWkts = b.wickets;
+    let html = `<div class="bbb-line${isWicket ? " bbb-wicket" : ""}">${b.over - 1}.${b.ball} — ${b.commentary}</div>`;
+    const ms = (before < 100 && after >= 100) ? 100 : (before < 50 && after >= 50) ? 50 : 0;
+    if (ms) html += `<div class="bbb-line bbb-milestone">${ms === 100 ? "🥇" : "🥈"} ${ms} completed by ${b.batterName} in ${ballsBy[b.batterName]} balls</div>`;
     const next = timeline[i + 1];
     const isLastOfOver = !next || next.over !== b.over; // robust to extras sharing the same displayed ball number
     if (isLastOfOver && summaryByOver.has(b.over)) {
@@ -2300,12 +2384,19 @@ function unassignedPlayers() { return appState.players.filter(p => !playerTeam(p
 function teamPlayers(team) { return team.playerIds.map(getPlayer).filter(Boolean); }
 
 // ---------- tab switching ----------
+(function placeDbChip() {
+  const chip = document.getElementById("dbIndicator"), top = document.querySelector(".header-top");
+  if (chip && top) top.appendChild(chip);
+})();
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
     document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
     btn.classList.add("active");
     document.getElementById(btn.dataset.tab + "Tab").classList.add("active");
+    // keep the chosen tab visible in the scrolling tab bar, and bring the content into view
+    if (btn.closest(".tab-nav")) btn.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    else { const nav = document.querySelector(".tab-nav"); if (nav) nav.scrollIntoView({ block: "start", behavior: "smooth" }); }
     if (btn.dataset.tab === "teams") renderTeamsTab();
     if (btn.dataset.tab === "quickmatch") renderQuickMatchTab();
     if (btn.dataset.tab === "stats") renderStatsTab();
@@ -3915,6 +4006,7 @@ function renderSeasonsApp() {
 }
 
 let seasonsArchiveOpen = false;
+let seasonsCreateOpen = false;
 function sortedSeasons(list) {
   const mode = appState.settings?.seasonSort || "manual";
   const arr = list.slice();
@@ -3975,12 +4067,15 @@ function renderSeasonsAppHome() {
     <div class="ps-archive-head" id="toggleArchivedSeasons">${seasonsArchiveOpen ? "▾" : "▸"} Archived seasons (${archivedSeasons.length}) — not counted in any stats</div>
     ${seasonsArchiveOpen ? archivedSeasons.map((s, i) => cardHtml(s, i, archivedSeasons.length)).join("") : ""}` : "";
 
+  const nextSeasonName = `Season ${appState.seasons.reduce((m, s) => { const k = /(\d+)\s*$/.exec(s.name); return k ? Math.max(m, Number(k[1])) : m; }, 0) + 1}`;
+  const showCreate = appState.seasons.length === 0 || seasonsCreateOpen;
   body.innerHTML = `
-    <div class="ps-card">
+    ${appState.seasons.length ? `<button type="button" class="ps-new-season-toggle" id="toggleCreateSeason">${showCreate ? "✕ Close new season" : "＋ New season"}</button>` : ""}
+    <div class="ps-card" style="${showCreate ? "" : "display:none;"}">
       <div class="ps-card-title">Create Season</div>
       <div class="ps-create-row">
         <label class="ps-inline-field" style="flex:1 1 160px;">Season name
-          <input type="text" id="newSeasonName" value="Season 1" class="ps-select" style="width:100%; box-sizing:border-box;" />
+          <input type="text" id="newSeasonName" value="${nextSeasonName}" class="ps-select" style="width:100%; box-sizing:border-box;" />
         </label>
         <label class="ps-inline-field" style="flex:0 0 90px;">Overs/match
           <input type="number" id="newSeasonOvers" value="20" min="1" class="ps-select" style="width:100%; box-sizing:border-box;" />
@@ -3996,6 +4091,8 @@ function renderSeasonsAppHome() {
     ${archivedHtml}
   `;
 
+  const createToggle = document.getElementById("toggleCreateSeason");
+  if (createToggle) createToggle.onclick = () => { seasonsCreateOpen = !seasonsCreateOpen; renderSeasonsAppHome(); };
   const sortSel = document.getElementById("seasonSortSelect");
   if (sortSel) sortSel.onchange = () => { appState.settings = { ...(appState.settings || {}), seasonSort: sortSel.value }; persistState(); renderSeasonsAppHome(); };
   body.querySelectorAll(".season-move-btn").forEach(btn => {
@@ -4040,6 +4137,7 @@ function renderSeasonsAppHome() {
     seasonsAppScreen = "detail";
     seasonsDetailTab = "groups";
     seasonsPottEditing = false;
+    seasonsCreateOpen = false;
     renderSeasonsApp();
   };
 }
@@ -4412,15 +4510,15 @@ function renderSeasonsAppDetail() {
       <div class="ps-card-header-row" style="margin-bottom:8px;">
         <span class="ps-card-title" style="margin-bottom:0;">${season.name}</span>
         <div style="display:flex; gap:8px;">
-          <button class="ps-ghost-btn edit-season-btn">Edit</button>
+          <button class="ps-ghost-btn edit-season-btn">⚙ Settings</button>
           <button class="ps-remove-btn delete-season-btn" data-season-id="${season.id}">Delete Season</button>
         </div>
       </div>
       <div class="ps-summary-row">
         <div class="ps-summary-stat"><b>${teamCount}</b><span>Teams</span></div>
-        <div class="ps-summary-stat"><b>${playedCount}</b><span>Matches played</span></div>
-        <div class="ps-summary-stat"><b>${allSeasonMatches.length}</b><span>Matches scheduled</span></div>
-        <div class="ps-summary-stat"><b>${totalOvers}</b><span>Overs/match</span></div>
+        <div class="ps-summary-stat"><b>${playedCount}</b><span>Played</span></div>
+        <div class="ps-summary-stat"><b>${allSeasonMatches.length}</b><span>Scheduled</span></div>
+        <div class="ps-summary-stat"><b>${totalOvers}</b><span>Overs</span></div>
       </div>
       ${championHtml}
       <details class="ps-info-details">
@@ -4935,6 +5033,9 @@ document.getElementById("simulateBtn").addEventListener("click", () => {
   }
 
   playBackMatch(result, teamColors, { totalOvers, matchContext: { teamA: teamPlayers(teamAObj), teamB: teamPlayers(teamBObj), pitch } });
+  // bring the live scoreboard into view so the match is visible straight away
+  const sb = document.getElementById("liveScore");
+  if (sb) setTimeout(() => (sb.closest(".live-scoreboard") || sb).scrollIntoView({ behavior: "smooth", block: "start" }), 50);
 });
 
 /** Plays the pre-computed match back ball by ball at ~2 overs (12 balls)
@@ -4956,15 +5057,120 @@ function playBackMatch(result, teamColors, opts) {
   ];
 
   let inningsIdx = 0, ballIdx = 0;
+  // ---- pause / resume with a double-tap anywhere on the live view
+  let paused = false, pendingStep = null, finished = false, labelBase = "";
+  const setLabel = (t) => { labelBase = t; liveLabel.textContent = paused ? `${t} · ⏸ Paused` : t; };
+  const schedule = (fn, ms) => { setTimeout(() => { if (paused) pendingStep = fn; else fn(); }, ms); };
+  const togglePause = () => {
+    if (finished) return;
+    paused = !paused;
+    liveLabel.textContent = paused ? `${labelBase} · ⏸ Paused` : labelBase;
+    pauseHint.textContent = paused ? "⏸ Paused — double-tap score to resume" : "Double-tap score to pause";
+    pauseHint.classList.toggle("is-paused", paused);
+    if (!paused && pendingStep) { const fn = pendingStep; pendingStep = null; fn(); }
+  };
+  // only the scoreboard box (label + big score) reacts to the double-tap,
+  // so the commentary below can be scrolled freely
+  const liveArea = liveScore.closest(".live-scoreboard") || liveScore.parentElement;
+  let pauseHint = liveArea.querySelector(".pause-hint");
+  if (!pauseHint) { pauseHint = document.createElement("div"); pauseHint.className = "pause-hint"; liveArea.appendChild(pauseHint); }
+  pauseHint.textContent = "Double-tap score to pause"; pauseHint.classList.remove("is-paused"); pauseHint.style.display = "";
+  // ---- "match summary till this ball": a live mini-scorecard under the commentary
+  // tabs above the commentary: summary / ball-by-ball for each innings.
+  // The live feed (current innings ball-by-ball) is the default tab.
+  let tabsBar = feed.parentElement.querySelector(".live-tabs");
+  if (!tabsBar) { tabsBar = document.createElement("div"); tabsBar.className = "live-tabs"; feed.insertAdjacentElement("beforebegin", tabsBar); }
+  let panel = feed.parentElement.querySelector(".live-panel");
+  if (!panel) { panel = document.createElement("div"); panel.className = "commentary-feed live-panel"; feed.insertAdjacentElement("afterend", panel); }
+  tabsBar.style.display = ""; panel.style.display = "none"; feed.style.display = "";
+  const sumBox = panel;
+  let sumOpen = false, activeTab = "cur-bbb";
+  let bat = {}, bowl = {}, extrasSoFar = 0, lastState = null;
+  const resetInnings = () => { bat = {}; bowl = {}; extrasSoFar = 0; lastState = null; };
+  const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  // completed 1st innings, shown in the same layout as the live card during the chase
+  const firstInningsCardHtml = () => {
+    const f = result.first;
+    const batRows = f.battingLog.filter(x => x.balls > 0 || x.out).map(x =>
+      `<tr class="${x.out ? "is-out" : "is-in"}"><td>${esc(x.name)}${x.out ? "" : " *"}</td><td>${x.runs}</td><td>${x.balls}</td><td>${x.fours || 0}</td><td>${x.sixes || 0}</td><td>${x.balls ? (x.runs * 100 / x.balls).toFixed(0) : "-"}</td></tr>`).join("");
+    const bowlRows = f.bowlingLog.filter(x => x.overs > 0).map(x => {
+      const balls = Math.floor(x.overs) * 6 + Math.round((x.overs % 1) * 10);
+      return `<tr><td>${esc(x.name)}</td><td>${formatOvers(x.overs)}</td><td>${x.runs}</td><td>${x.wickets}</td><td>${balls ? (x.runs * 6 / balls).toFixed(2) : "-"}</td></tr>`;
+    }).join("");
+    return `<div class="sum-head">1st innings · ${esc(result.firstTeamName)} ${f.runs}/${f.wickets} (${formatOvers(f.oversUsed)}) · extras ${f.extras}</div>
+      <table class="sum-table"><thead><tr><th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead><tbody>${batRows}</tbody></table>
+      <table class="sum-table"><thead><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Econ</th></tr></thead><tbody>${bowlRows}</tbody></table>
+`;
+  };
+  const renderSummary = () => {
+    if (!sumOpen) return;
+    if (!lastState) { sumBox.innerHTML = `<div class="sum-first">No balls bowled yet.</div>`; return; }
+    const st = lastState;
+    const batRows = Object.entries(bat).map(([name, x]) => {
+      const sr = x.b ? (x.r * 100 / x.b).toFixed(0) : "-";
+      return `<tr class="${x.out ? "is-out" : "is-in"}"><td>${esc(name)}${x.out ? "" : " *"}</td><td>${x.r}</td><td>${x.b}</td><td>${x.fours}</td><td>${x.sixes}</td><td>${sr}</td></tr>`;
+    }).join("");
+    const bowlRows = Object.entries(bowl).map(([name, x]) => {
+      const ov = Math.floor(x.balls / 6) + (x.balls % 6) / 10;
+      const eco = x.balls ? (x.runs * 6 / x.balls).toFixed(2) : "-";
+      return `<tr><td>${esc(name)}</td><td>${formatOvers(ov)}</td><td>${x.runs}</td><td>${x.w}</td><td>${eco}</td></tr>`;
+    }).join("");
+    let foot = "";
+    if (st.innings === 0) {
+      const ballsLeft = Math.max(0, allottedOvers * 6 - st.legal);
+      const proj = (rate) => Math.round(st.score + rate * ballsLeft / 6);
+      // the next two even run rates above the current one, like TV graphics (5.6 -> 6 and 8)
+      let evenA = Math.floor(st.crr) + 1; if (evenA % 2) evenA += 1;
+      foot = `<div class="sum-proj"><b>Projected score</b>
+        <div>At CRR ${st.crr.toFixed(2)}: <b>${proj(st.crr)}</b></div>
+        <div>At ${evenA} rpo: <b>${proj(evenA)}</b></div>
+        <div>At ${evenA + 2} rpo: <b>${proj(evenA + 2)}</b></div></div>`;
+    } else {
+      foot = st.need > 0
+        ? `<div class="sum-need">${esc(result.secondTeamName)} require <b>${st.need}</b> run${st.need === 1 ? "" : "s"} in <b>${st.ballsLeft}</b> ball${st.ballsLeft === 1 ? "" : "s"}</div>`
+        : `<div class="sum-need">${esc(result.secondTeamName)} have reached the target</div>`;
+    }
+    sumBox.innerHTML = `
+      <div class="sum-head">${esc(st.team)} ${st.score}/${st.wkts} (${formatOvers(st.overs)}) · extras ${extrasSoFar}</div>
+      <table class="sum-table"><thead><tr><th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead><tbody>${batRows}</tbody></table>
+      <table class="sum-table"><thead><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Econ</th></tr></thead><tbody>${bowlRows}</tbody></table>
+      ${foot}`;
+  };
+  const buildTabs = () => {
+    const tabs = inningsIdx === 0
+      ? [["cur-bbb", "1st BBB"], ["cur-sum", "1st Sum"]]
+      : [["1-sum", "1st Sum"], ["1-bbb", "1st BBB"], ["cur-sum", "2nd Sum"], ["cur-bbb", "2nd BBB"]];
+    tabsBar.innerHTML = tabs.map(([k, l]) => `<button type="button" class="live-tab${k === activeTab ? " active" : ""}" data-tab="${k}">${l}</button>`).join("");
+    tabsBar.querySelectorAll(".live-tab").forEach(btn => { btn.onclick = () => selectTab(btn.dataset.tab); });
+  };
+  const selectTab = (k) => {
+    activeTab = k; sumOpen = k === "cur-sum";
+    feed.style.display = k === "cur-bbb" ? "" : "none";
+    panel.style.display = k === "cur-bbb" ? "none" : "";
+    if (k === "cur-sum") renderSummary();
+    else if (k === "1-sum") panel.innerHTML = firstInningsCardHtml();
+    else if (k === "1-bbb") panel.innerHTML = renderFullBallByBall(result.first.timeline, result.first.oversSummary);
+    panel.scrollTop = 0;
+    buildTabs();
+  };
+
+  if (liveArea.__pauseCleanup) liveArea.__pauseCleanup();          // one listener per live view, even across matches
+  let lastTap = 0;
+  const onTouch = (ev) => { const now = Date.now(); if (now - lastTap < 350) { ev.preventDefault(); togglePause(); lastTap = 0; } else lastTap = now; };
+  const onDbl = (ev) => { ev.preventDefault(); togglePause(); };
+  liveArea.addEventListener("touchend", onTouch, { passive: false });
+  liveArea.addEventListener("dblclick", onDbl);
+  liveArea.__pauseCleanup = () => { liveArea.removeEventListener("touchend", onTouch); liveArea.removeEventListener("dblclick", onDbl); };
   const allottedOvers = opts.totalOvers || 20;
-  let batterRuns = {}, prevScore = 0, prevWkts = 0;
+  let batterRuns = {}, batterBalls = {}, prevScore = 0, prevWkts = 0;
 
   function step() {
     const inn = innings[inningsIdx];
     if (ballIdx === 0) {
-      liveLabel.textContent = inn.label;
+      setLabel(inn.label);
+      selectTab("cur-bbb");   // each innings opens on its own live ball-by-ball
       feed.innerHTML = "";
-      batterRuns = {}; prevScore = 0; prevWkts = 0;
+      batterRuns = {}; batterBalls = {}; prevScore = 0; prevWkts = 0; resetInnings();
       if (tossLineEl) {
         if (inningsIdx === 0) {
           tossLineEl.textContent = `${result.toss.tossWinnerName} won the toss and chose to ${result.toss.decision === "bat" ? "bat" : "bowl"} first.`;
@@ -4981,17 +5187,20 @@ function playBackMatch(result, teamColors, opts) {
       // real final total, using the innings' own authoritative overs
       // count, before moving on
       const lastBall = inn.timeline[inn.timeline.length - 1];
-      if (lastBall) liveScore.textContent = `${lastBall.score}/${lastBall.wickets} (${formatOvers(inn.totalOvers)})`;
+      if (lastBall) liveScore.innerHTML = `<div class="live-main">${lastBall.score}/${lastBall.wickets} (${formatOvers(inn.totalOvers)})</div><div class="live-small">Innings complete</div>`;
       inningsIdx++;
       ballIdx = 0;
       if (inningsIdx >= innings.length) {
+        finished = true; paused = false; pauseHint.style.display = "none";
+        tabsBar.style.display = "none"; panel.style.display = "none"; feed.style.display = "";   // the full scorecard below has both innings
+        if (liveArea.__pauseCleanup) { liveArea.__pauseCleanup(); liveArea.__pauseCleanup = null; }
         liveLabel.textContent = "Match complete";
         liveScore.textContent = "";
         renderCompleteScorecard(result, colors, finalSummaryEl, opts.matchContext);
         if (onComplete) onComplete();
         return;
       }
-      setTimeout(step, 600);
+      schedule(step, 600);
       return;
     }
     const b = inn.timeline[ballIdx];
@@ -5004,18 +5213,18 @@ function playBackMatch(result, teamColors, opts) {
     const isIllegal = b.extra === "wide" || b.extra === "noball";
     const legalDone = (b.over - 1) * 6 + b.ball - (isIllegal ? 1 : 0);
     const oversDone = Math.floor(legalDone / 6) + (legalDone % 6) / 10;
-    let rateText = "";
-    if (inningsIdx === 0) {
-      const crr = legalDone ? (b.score * 6 / legalDone) : 0;
-      rateText = `RR ${crr.toFixed(2)}`;
-    } else {
+    const crr = legalDone ? (b.score * 6 / legalDone) : 0;
+    let smallText = `CRR ${crr.toFixed(2)}`, midText = "";
+    if (inningsIdx === 1) {
       const target = result.first.runs + 1;
       const need = Math.max(0, target - b.score);
       const ballsLeft = Math.max(0, allottedOvers * 6 - legalDone);
       const rrr = ballsLeft ? (need * 6 / ballsLeft) : 0;
-      rateText = need > 0 ? `Need ${need} off ${ballsLeft} ball${ballsLeft === 1 ? "" : "s"} · RRR ${rrr.toFixed(2)}` : "Target reached";
+      smallText += need > 0 ? ` · RRR ${rrr.toFixed(2)}` : "";
+      midText = need > 0 ? `${need} required off ${ballsLeft} ball${ballsLeft === 1 ? "" : "s"}` : "Target reached";
     }
-    liveScore.innerHTML = `${b.score}/${b.wickets} (${formatOvers(oversDone)}) <span class="live-rate">${rateText}</span>`;
+    liveScore.innerHTML = `<div class="live-main">${b.score}/${b.wickets} (${formatOvers(oversDone)})</div>`
+      + `<div class="live-small">${smallText}</div>` + (midText ? `<div class="live-mid">${midText}</div>` : "");
     // who scored what off this ball, for 50 / 100 milestones
     const delta = b.score - prevScore;
     let toBatter = delta;
@@ -5024,7 +5233,29 @@ function playBackMatch(result, teamColors, opts) {
     const before = batterRuns[b.batterName] || 0;
     const after = before + toBatter;
     batterRuns[b.batterName] = after;
+    if (b.extra !== "wide" && b.extra !== "noball") batterBalls[b.batterName] = (batterBalls[b.batterName] || 0) + 1;   // balls faced (as the scorecard counts them)
     const isWicket = b.wickets > prevWkts;
+    // ---- running mini-scorecard
+    const bx = bat[b.batterName] || (bat[b.batterName] = { r: 0, b: 0, fours: 0, sixes: 0, out: false });
+    bx.r = after;
+    if (b.extra !== "wide" && b.extra !== "noball") bx.b += 1;
+    if (!b.extra && toBatter === 4) bx.fours++;
+    if (!b.extra && toBatter === 6) bx.sixes++;
+    const isRunOut = /run out/i.test(b.commentary);
+    if (isWicket && !isRunOut) bx.out = true;
+    if (isWicket && isRunOut) bx.out = true;    // the scorer records the striker as the run-out batter
+    const wx = bowl[b.bowlerName] || (bowl[b.bowlerName] = { balls: 0, runs: 0, w: 0 });
+    if (!isIllegal) wx.balls += 1;
+    wx.runs += (b.extra === "bye") ? 0 : delta;
+    if (isWicket && !isRunOut) wx.w += 1;
+    if (b.extra) extrasSoFar += delta - toBatter;
+    lastState = {
+      innings: inningsIdx, team: inningsIdx === 0 ? result.firstTeamName : result.secondTeamName,
+      score: b.score, wkts: b.wickets, legal: legalDone, overs: oversDone, crr,
+      need: inningsIdx === 1 ? Math.max(0, result.first.runs + 1 - b.score) : 0,
+      ballsLeft: Math.max(0, allottedOvers * 6 - legalDone),
+    };
+    renderSummary();
     prevScore = b.score; prevWkts = b.wickets;
     const line = document.createElement("div");
     let cls = "ball-line";
@@ -5035,12 +5266,11 @@ function playBackMatch(result, teamColors, opts) {
     line.className = cls;
     line.textContent = `${b.over - 1}.${b.ball}  ${b.commentary}`;
     feed.prepend(line);
-    if (!isWicket && before < 100 && after >= 100) {
-      const m = document.createElement("div"); m.className = "ball-line hundred-line";
-      m.textContent = `🥇 HUNDRED! ${b.batterName} reaches ${after}`; feed.prepend(m);
-    } else if (!isWicket && before < 50 && after >= 50) {
-      const m = document.createElement("div"); m.className = "ball-line fifty-line";
-      m.textContent = `🥈 FIFTY! ${b.batterName} reaches ${after}`; feed.prepend(m);
+    const milestone = (before < 100 && after >= 100) ? 100 : (before < 50 && after >= 50) ? 50 : 0;
+    if (milestone) {
+      const m = document.createElement("div"); m.className = "ball-line milestone-line";
+      m.textContent = `${milestone === 100 ? "🥇" : "🥈"} ${milestone} completed by ${b.batterName} in ${batterBalls[b.batterName]} balls`;
+      feed.prepend(m);
     }
     const next = inn.timeline[ballIdx + 1];
     const isLastOfOver = !next || next.over !== b.over;
@@ -5056,9 +5286,8 @@ function playBackMatch(result, teamColors, opts) {
         feed.prepend(summaryLine);
       }
     }
-    while (feed.children.length > 12) feed.removeChild(feed.lastChild);
     ballIdx++;
-    setTimeout(step, MS_PER_BALL);
+    schedule(step, MS_PER_BALL);
   }
 
   step();
