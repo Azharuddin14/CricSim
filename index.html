@@ -998,6 +998,14 @@
   .ps-match-actions-row { grid-template-columns: repeat(3, 1fr) !important; }
   .ps-match-actions-row .view-scorecard-btn { grid-column: span 2; }
   .ps-match-actions-row > button { white-space: nowrap; padding-left: 4px; padding-right: 4px; font-size: 12.5px; }
+  /* team profile: one 3-column grid so W/L lines up in both cards, with room before the finish */
+  .kv-row.kv-3 { display: grid; grid-template-columns: minmax(78px,1fr) 58px minmax(0,118px); gap: 8px; align-items: center; }
+  .kv-row.kv-3 .kv-key { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kv-row.kv-3 .kv-val { font-size: 12px; }
+  .kv-row.kv-3 .kv-mid { min-width: 0; text-align: left; }
+  .kv-row.kv-3 .kv-val { min-width: 0; text-align: right; white-space: normal; line-height: 1.25; }
+  .kv-wl { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #16213E; font-size: 13px; }
+  .kv-dim { color: #5a6b62 !important; font-weight: 500 !important; font-family: 'JetBrains Mono', monospace !important; font-size: 12px !important; }
 </style>
 
 </head>
@@ -1005,7 +1013,7 @@
 
 <header>
   <div class="header-top"><h1>MATCH<span>SIM</span></h1></div>
-  <p class="app-version-tag">Build 2026-10-09v · Broadcast scorecard in team colours, matching the app theme</p>
+  <p class="app-version-tag">Build 2026-10-09w · Team profile: W/L columns aligned across cards</p>
   <div class="db-indicator" id="dbIndicator"></div>
   <p class="header-blurb">An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <div class="launch-row">
@@ -3172,20 +3180,21 @@ function renderTeamProfile(teamId) {
       if (!winnerId) t++; else if (winnerId === teamId) w++; else l++;
     });
     const stage = getStageReachedInSeason(season, teamId);
-    const label = stage ? stage.label : "Group stage";
+    // short labels so the finish fits on one line ("Lost in Quarter Finals" -> "Quarter-finals")
+    const label = (stage ? stage.label : "Group stage").replace(/^Lost in (the )?/i, "").replace(/Quarter Finals?/i, "Quarter-finals").replace(/Semi Finals?/i, "Semi-finals");
     const medal = /champion/i.test(label) ? "🏆 " : /runner/i.test(label) ? "🥈 " : /semi/i.test(label) ? "🥉 " : "";
     return `<div class="kv-row kv-3">
       <span class="kv-key"><b>${season.name}</b></span>
-      <span class="kv-mid">W${w} L${l}${t ? ` T${t}` : ""}</span>
+      <span class="kv-mid kv-wl">W${w} L${l}${t ? ` T${t}` : ""}</span>
       <span class="kv-val ${medal ? "kv-gold" : ""}">${medal}${label}</span>
     </div>`;
   }).filter(Boolean);
 
   const h2hRows = Object.values(overall.headToHead).sort((a, b) => b.played - a.played).map(h =>
-    `<div class="kv-row kv-3"><span class="kv-key"><b>${getTeam(h.oppId)?.name || "Unknown"}</b></span><span class="kv-mid">${h.played} played</span><span class="kv-val">W${h.won} L${h.lost}${h.tied ? ` T${h.tied}` : ""}</span></div>`
+    `<div class="kv-row kv-3"><span class="kv-key"><b>${getTeam(h.oppId)?.name || "Unknown"}</b></span><span class="kv-mid kv-wl">W${h.won} L${h.lost}${h.tied ? ` T${h.tied}` : ""}</span><span class="kv-val kv-dim">${h.played} played</span></div>`
   ).join("") || `<p class="ps-empty">No matches recorded yet.</p>`;
   const koH2hRows = Object.values(koH2H.headToHead).sort((a, b) => b.played - a.played).map(h =>
-    `<div class="kv-row kv-3"><span class="kv-key"><b>${getTeam(h.oppId)?.name || "Unknown"}</b></span><span class="kv-mid">${h.played} played</span><span class="kv-val">W${h.won} L${h.lost}${h.tied ? ` T${h.tied}` : ""}</span></div>`
+    `<div class="kv-row kv-3"><span class="kv-key"><b>${getTeam(h.oppId)?.name || "Unknown"}</b></span><span class="kv-mid kv-wl">W${h.won} L${h.lost}${h.tied ? ` T${h.tied}` : ""}</span><span class="kv-val kv-dim">${h.played} played</span></div>`
   ).join("") || `<p class="ps-empty">No knockout matches recorded yet.</p>`;
 
   function viewOnlyPlayerCardHtml(p, orderNum) {
