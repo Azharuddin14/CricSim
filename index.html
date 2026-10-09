@@ -813,7 +813,7 @@
 
 <header>
   <div class="header-top"><h1>MATCH<span>SIM</span></h1></div>
-  <p class="app-version-tag">Build 2026-10-08i · UI polish: compact header, sticky tabs, tidier seasons and database panels</p>
+  <p class="app-version-tag">Build 2026-10-09 · UI polish · archived seasons left out of team trophies, records and past players</p>
   <div class="db-indicator" id="dbIndicator"></div>
   <p class="header-blurb">An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <div class="launch-row">
@@ -2890,7 +2890,7 @@ function renderTeamProfile(teamId) {
   const overall = getOverallRecord(teamId, false);
   const koH2H = getOverallRecord(teamId, true);
   const breakdown = getStageBreakdown(teamId);
-  const seasonRows = appState.seasons.map(season => {
+  const seasonRows = countedSeasons().map(season => {
     const inSeason = season.groups.some(g => g.teamIds.includes(teamId)) || season.knockoutRounds.some(r => r.matches.some(m => m.team1Id === teamId || m.team2Id === teamId));
     if (!inSeason) return null;
     const matches = [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)].filter(m => m.team1Id === teamId || m.team2Id === teamId);
@@ -3298,9 +3298,12 @@ function computeStandings(teamIds, matches, matchOvers) {
 
 /** Every match across every saved season that a given team appears in
  * (any group or knockout round), oldest first within each season. */
+/** Seasons that count for team records — archived seasons are left out. */
+function countedSeasons() { return (appState.seasons || []).filter(s => !s.archived); }
+
 function allMatchesForTeamAcrossSeasons(teamId) {
   const out = [];
-  appState.seasons.forEach(season => {
+  countedSeasons().forEach(season => {
     [...season.groups.flatMap(g => g.matches), ...season.knockoutRounds.flatMap(r => r.matches)]
       .filter(m => m.team1Id === teamId || m.team2Id === teamId)
       .forEach(m => out.push({ match: m, season }));
@@ -3355,7 +3358,7 @@ function getStageReachedInSeason(season, teamId) {
  * profile's trophy cabinet. */
 function getStageBreakdown(teamId) {
   const b = { championships: 0, runnerUps: 0, semis: 0, quarterFinals: 0, groupStage: 0 };
-  appState.seasons.forEach(season => {
+  countedSeasons().forEach(season => {
     const s = getStageReachedInSeason(season, teamId);
     if (!s) return;
     if (s.stage === "champion") b.championships++;
