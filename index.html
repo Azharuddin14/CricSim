@@ -1034,6 +1034,13 @@
   .sc-tab-panel .team-tint table:not(.sc-bat-table) td:last-child { min-width: 44px; padding-right: 12px; }
   .sc-tab-panel .team-tint table:not(.sc-bat-table) td:first-child { font-size: 12px; }
   .sc-tab-panel .team-tint th:first-child, .sc-tab-panel .team-tint td:first-child { padding-left: 12px; }
+  .sc-bat-table .sc-num { width: 26px; min-width: 26px; padding-right: 4px; }
+  .sc-bat-table th:last-child, .sc-bat-table td:last-child { width: 40px; min-width: 40px; padding-right: 12px; }
+  .sc-tab-panel .sc-bat-table .sc-bat-how { margin-left: 5px; font-size: 9.5px; letter-spacing: -0.1px; }
+  /* never hide who took the wicket: if name + dismissal don't fit, the dismissal drops to a second line */
+  .sc-bat-table td.sc-bat-cell { white-space: normal; overflow: visible; text-overflow: clip; max-width: none; line-height: 1.2; }
+  .sc-tab-panel .sc-bat-table .sc-bat-name { white-space: nowrap; }
+  .sc-tab-panel .sc-bat-table .sc-bat-how { display: inline-block; white-space: nowrap; }
 </style>
 
 </head>
@@ -1041,7 +1048,7 @@
 
 <header>
   <div class="header-top"><h1>MATCH<span>SIM</span></h1></div>
-  <p class="app-version-tag">Build 2026-10-09x · Symmetric scorecard columns · season & stage under every record</p>
+  <p class="app-version-tag">Build 2026-10-09y · Scorecard names shortened (V Kohli) so dismissals fit</p>
   <div class="db-indicator" id="dbIndicator"></div>
   <p class="header-blurb">An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <div class="launch-row">
@@ -2142,6 +2149,20 @@ function resolveTieWithSuperOver(result, teamA, teamB, pitch) {
 // ============================================================
 
 // ---------- scorecard render helpers ----------
+/** "Virat Kohli" -> "V Kohli", "Faf du Plessis" -> "F du Plessis" — first word to its initial. */
+function shortName(n) {
+  const p = String(n || "").trim().split(/\s+/);
+  if (p.length < 2) return p[0] || "";
+  return `${p[0].charAt(0)} ${p.slice(1).join(" ")}`;
+}
+function dismissalTextShort(d) {
+  if (!d) return dismissalText(d);
+  if (d.type === "Caught" && d.fielder && d.fielder === d.bowler) return `c & b ${shortName(d.bowler)}`;
+  const t = dismissalText({ ...d, bowler: d.bowler ? shortName(d.bowler) : d.bowler, fielder: d.fielder ? shortName(d.fielder) : d.fielder });
+  // scorecard shorthand: "Bowled b X" -> "b X", "LBW b X" -> "lbw b X", "Run Out (X)" -> "run out (X)"
+  return t.replace(/^Bowled\s+/i, "").replace(/^LBW\b/, "lbw").replace(/^Run Out/i, "run out").replace(/^Stumped/i, "st");
+}
+
 function renderBattingTable(log) {
   // all 11 in batting order, one line each: name + how out on the left,
   // R · B · SR on the right. The openers plus one new batter per wicket have
@@ -2150,12 +2171,12 @@ function renderBattingTable(log) {
   const cameIn = Math.min(log.length, outs + 2);
   const rows = log.map((b, i) => {
     if (i >= cameIn && b.balls === 0 && !b.out) {
-      return `<tr class="sc-dnb"><td class="sc-bat-cell"><span class="sc-bat-name">${b.name}</span></td><td class="sc-dnb-tag" colspan="5">did not bat</td></tr>`;
+      return `<tr class="sc-dnb"><td class="sc-bat-cell"><span class="sc-bat-name">${shortName(b.name)}</span></td><td class="sc-dnb-tag" colspan="5">did not bat</td></tr>`;
     }
     const sr = b.balls > 0 ? ((b.runs / b.balls) * 100).toFixed(1) : "0.0";
     return `
     <tr class="${b.out ? "sc-out" : "sc-notout"}">
-      <td class="sc-bat-cell"><span class="sc-bat-name">${b.name}${b.out ? "" : " *"}</span><span class="sc-bat-how ${b.out ? "out-tag" : "notout-tag"}">${b.out ? dismissalText(b.dismissal) : "not out"}</span></td>
+      <td class="sc-bat-cell" title="${b.name}"><span class="sc-bat-name">${shortName(b.name)}${b.out ? "" : " *"}</span><span class="sc-bat-how ${b.out ? "out-tag" : "notout-tag"}">${b.out ? dismissalTextShort(b.dismissal) : "not out"}</span></td>
       <td class="mono sc-num sc-runs">${b.runs}</td>
       <td class="mono sc-num">${b.balls}</td>
       <td class="mono sc-num sc-bnd">${b.fours}</td>
