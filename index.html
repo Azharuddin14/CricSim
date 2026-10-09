@@ -1006,6 +1006,34 @@
   .kv-row.kv-3 .kv-val { min-width: 0; text-align: right; white-space: normal; line-height: 1.25; }
   .kv-wl { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #16213E; font-size: 13px; }
   .kv-dim { color: #5a6b62 !important; font-weight: 500 !important; font-family: 'JetBrains Mono', monospace !important; font-size: 12px !important; }
+  /* batting & bowling share one grid: same font sizes, same left inset, numbers right-aligned with the same right inset */
+  .sc-tab-panel .sc-bat-table, .sc-tab-panel .sc-bowl-table { table-layout: auto; width: 100%; }
+  .sc-tab-panel .sc-bat-table th, .sc-tab-panel .sc-bowl-table th,
+  .sc-tab-panel .sc-bat-table td, .sc-tab-panel .sc-bowl-table td { padding-left: 10px; }
+  .sc-tab-panel .sc-bat-table .sc-num, .sc-tab-panel .sc-bowl-table .sc-num { width: 1%; white-space: nowrap; text-align: right; padding-left: 6px; padding-right: 6px; font-size: 11px; }
+  .sc-tab-panel .sc-bat-table tr > :last-child, .sc-tab-panel .sc-bowl-table tr > :last-child { padding-right: 12px; }
+  .sc-tab-panel .sc-bat-table th.sc-num, .sc-tab-panel .sc-bowl-table th.sc-num { font-size: 9.5px; }
+  .sc-tab-panel .sc-bowl-table td:first-child { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+  .sc-tab-panel .sc-bowl-table td.sc-num:nth-child(5) { font-weight: 700; color: var(--cream); font-size: 12px; }   /* wickets */
+  .sc-tab-panel .sc-bat-table .sc-bat-name { font-size: 12px; }
+  .sc-tab-panel .sc-bat-table .sc-bat-how { font-size: 9.5px; }
+  .sc-tab-panel .sc-bat-table td.sc-runs { font-size: 12px; }
+  .rec-ctx { display: block; font-style: normal; font-size: 9.5px; letter-spacing: 0.3px; color: var(--cream-dim); opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
+  /* scorecard: same right edge for batting and bowling, slightly smaller type */
+  .sc-tab-panel table { font-size: 11.5px; }
+  .sc-tab-panel .sc-bat-name { font-size: 12px; }
+  .sc-tab-panel .sc-bat-table .sc-bat-how { font-size: 9.5px; }
+  .sc-bat-table .sc-num { width: 30px; min-width: 30px; font-size: 10.5px; padding-left: 0; padding-right: 6px; }
+  .sc-bat-table td.sc-runs { font-size: 12px; }
+  .sc-bat-table th:last-child, .sc-bat-table td:last-child { width: 44px; min-width: 44px; padding-right: 12px; }
+  .sc-tab-panel .team-tint table:not(.sc-bat-table) th:not(:first-child),
+  .sc-tab-panel .team-tint table:not(.sc-bat-table) td:not(:first-child) { text-align: right; width: 1%; min-width: 30px; white-space: nowrap; padding-left: 0; padding-right: 6px; font-size: 10.5px; }
+  .sc-tab-panel .team-tint table:not(.sc-bat-table) { width: 100%; }
+  .sc-tab-panel .team-tint table:not(.sc-bat-table) th:first-child, .sc-tab-panel .team-tint table:not(.sc-bat-table) td:first-child { width: 100%; }
+  .sc-tab-panel .team-tint table:not(.sc-bat-table) th:last-child,
+  .sc-tab-panel .team-tint table:not(.sc-bat-table) td:last-child { min-width: 44px; padding-right: 12px; }
+  .sc-tab-panel .team-tint table:not(.sc-bat-table) td:first-child { font-size: 12px; }
+  .sc-tab-panel .team-tint th:first-child, .sc-tab-panel .team-tint td:first-child { padding-left: 12px; }
 </style>
 
 </head>
@@ -1013,7 +1041,7 @@
 
 <header>
   <div class="header-top"><h1>MATCH<span>SIM</span></h1></div>
-  <p class="app-version-tag">Build 2026-10-09w · Team profile: W/L columns aligned across cards</p>
+  <p class="app-version-tag">Build 2026-10-09x · Symmetric scorecard columns · season & stage under every record</p>
   <div class="db-indicator" id="dbIndicator"></div>
   <p class="header-blurb">An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <div class="launch-row">
@@ -2209,16 +2237,16 @@ function renderBowlingTable(log, timeline) {
     return `
     <tr>
       <td>${b.name}</td>
-      <td class="mono">${formatOvers(b.overs)}</td>
-      <td class="mono">${b.maidens}</td>
-      <td class="mono">${b.runs}</td>
-      <td class="mono">${b.wickets}</td>
-      <td class="mono">${economy}</td>
+      <td class="mono sc-num">${formatOvers(b.overs)}</td>
+      <td class="mono sc-num">${b.maidens}</td>
+      <td class="mono sc-num">${b.runs}</td>
+      <td class="mono sc-num">${b.wickets}</td>
+      <td class="mono sc-num">${economy}</td>
     </tr>`;
   }).join("");
   const used = ordered.filter(b => b.overs > 0).length;
   const pad = Array.from({ length: Math.max(0, 8 - used) }, () => `<tr class="sc-pad"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`).join("");
-  return `<table><thead><tr><th>Bowler</th><th>O</th><th>M</th><th>R</th><th>W</th><th>Econ</th></tr></thead><tbody>${rows}${pad}</tbody></table>`;
+  return `<table class="sc-bowl-table"><thead><tr><th>Bowler</th><th class="sc-num">O</th><th class="sc-num">M</th><th class="sc-num">R</th><th class="sc-num">W</th><th class="sc-num">Econ</th></tr></thead><tbody>${rows}${pad}</tbody></table>`;
 }
 // ============================================================
 // UI wiring — a master player database, named teams built from it
@@ -4178,6 +4206,22 @@ function getLowestDefended(matches, n, teamFilter) {
   });
   return rows.sort((a, b) => a.score.runs - b.score.runs).slice(0, n);
 }
+/** "Season 23 · Group A" / "Season 23 · Final" / "Friendly" for a saved match. */
+let _recCtxCache = null;
+function recordContext(m) {
+  if (!m) return "";
+  if (m.seasonMatchId == null) return (m.source || "quickmatch") === "quickmatch" ? "Friendly" : "";
+  if (!_recCtxCache) {
+    _recCtxCache = new Map();
+    (appState.seasons || []).forEach(season => {
+      season.groups.forEach(g => g.matches.forEach(x => _recCtxCache.set(x.id, `${season.name} · ${g.name}`)));
+      season.knockoutRounds.forEach(r => r.matches.forEach(x => _recCtxCache.set(x.id, `${season.name} · ${r.name}`)));
+    });
+    setTimeout(() => { _recCtxCache = null; }, 0);   // rebuilt on the next render
+  }
+  return _recCtxCache.get(m.seasonMatchId) || "Season";
+}
+
 function getMomTallyAllMatches(matches) {
   const counts = {};
   matches.forEach(m => {
@@ -4258,19 +4302,19 @@ function renderRecordsTab() {
 
   const topScores = getTopScores(matches, 10);
   document.getElementById("recordsTopScores").innerHTML = topScores.length === 0 ? empty : topScores.map((i, idx) =>
-    `<div class="rec-row"><span class="rec-rank">${idx+1}</span><span class="rec-main"><b>${i.team}</b><small>vs ${i.opponent}</small></span><span class="rec-val">${scoreLine(i.score)}</span></div>`).join("");
+    `<div class="rec-row"><span class="rec-rank">${idx+1}</span><span class="rec-main"><b>${i.team}</b><small>vs ${i.opponent}</small>${recordContext((i).match) ? `<em class="rec-ctx">${recordContext((i).match)}</em>` : ""}</span><span class="rec-val">${scoreLine(i.score)}</span></div>`).join("");
 
   const topChases = getTopChases(matches, 10);
   document.getElementById("recordsTopChases").innerHTML = topChases.length === 0 ? empty : topChases.map((i, idx) =>
-    `<div class="rec-row"><span class="rec-rank">${idx+1}</span><span class="rec-main"><b>${i.team}</b><small>chased vs ${i.opponent}</small></span><span class="rec-val">${scoreLine(i.score)}</span></div>`).join("");
+    `<div class="rec-row"><span class="rec-rank">${idx+1}</span><span class="rec-main"><b>${i.team}</b><small>chased vs ${i.opponent}</small>${recordContext((i).match) ? `<em class="rec-ctx">${recordContext((i).match)}</em>` : ""}</span><span class="rec-val">${scoreLine(i.score)}</span></div>`).join("");
 
   const lowScores = getLowScores(matches, 10);
   document.getElementById("recordsLowScores").innerHTML = lowScores.length === 0 ? empty : lowScores.map((i, idx) =>
-    `<div class="rec-row"><span class="rec-rank">${idx+1}</span><span class="rec-main"><b>${i.team}</b><small>vs ${i.opponent}</small></span><span class="rec-val">${scoreLine(i.score)}</span></div>`).join("");
+    `<div class="rec-row"><span class="rec-rank">${idx+1}</span><span class="rec-main"><b>${i.team}</b><small>vs ${i.opponent}</small>${recordContext((i).match) ? `<em class="rec-ctx">${recordContext((i).match)}</em>` : ""}</span><span class="rec-val">${scoreLine(i.score)}</span></div>`).join("");
 
   const lowestDefended = getLowestDefended(matches, 10);
   document.getElementById("recordsLowestDefended").innerHTML = lowestDefended.length === 0 ? empty : lowestDefended.map((i, idx) =>
-    `<div class="rec-row"><span class="rec-rank">${idx+1}</span><span class="rec-main"><b>${i.team}</b><small>defended · ${i.opponent} ${scoreLine(i.oppScore)}</small></span><span class="rec-val">${scoreLine(i.score)}</span></div>`).join("");
+    `<div class="rec-row"><span class="rec-rank">${idx+1}</span><span class="rec-main"><b>${i.team}</b><small>defended · ${i.opponent} ${scoreLine(i.oppScore)}</small>${recordContext((i).match) ? `<em class="rec-ctx">${recordContext((i).match)}</em>` : ""}</span><span class="rec-val">${scoreLine(i.score)}</span></div>`).join("");
 
   const momTally = getMomTallyAllMatches(matches).slice(0, 10);
   document.getElementById("recordsMomTally").innerHTML = momTally.length === 0 ? empty : `
@@ -4279,11 +4323,11 @@ function renderRecordsTab() {
 
   const topBatting = getTopBattingPerformances(matches, 10);
   document.getElementById("recordsTopMomBatting").innerHTML = topBatting.length === 0 ? empty : topBatting.map((b, idx) =>
-    `<div class="rec-row"><span class="rec-rank">${idx+1}</span><span class="rec-main"><b>${b.name}</b><small>${b.teamName}</small></span><span class="rec-val">${b.runs}${b.out ? "" : "*"} <i>(${b.balls})</i></span></div>`).join("");
+    `<div class="rec-row"><span class="rec-rank">${idx+1}</span><span class="rec-main"><b>${b.name}</b><small>${b.teamName}</small>${recordContext((b).match) ? `<em class="rec-ctx">${recordContext((b).match)}</em>` : ""}</span><span class="rec-val">${b.runs}${b.out ? "" : "*"} <i>(${b.balls})</i></span></div>`).join("");
 
   const topBowling = getTopBowlingPerformances(matches, 10);
   document.getElementById("recordsTopMomBowling").innerHTML = topBowling.length === 0 ? empty : topBowling.map((b, idx) =>
-    `<div class="rec-row"><span class="rec-rank">${idx+1}</span><span class="rec-main"><b>${b.name}</b><small>${b.teamName}</small></span><span class="rec-val">${b.wickets}/${b.runs} <i>(${formatOvers(b.overs)})</i></span></div>`).join("");
+    `<div class="rec-row"><span class="rec-rank">${idx+1}</span><span class="rec-main"><b>${b.name}</b><small>${b.teamName}</small>${recordContext((b).match) ? `<em class="rec-ctx">${recordContext((b).match)}</em>` : ""}</span><span class="rec-val">${b.wickets}/${b.runs} <i>(${formatOvers(b.overs)})</i></span></div>`).join("");
 }
 
 // ============================================================
