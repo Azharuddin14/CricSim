@@ -1048,7 +1048,7 @@
 
 <header>
   <div class="header-top"><h1>MATCH<span>SIM</span></h1></div>
-  <p class="app-version-tag">Build 2026-10-09z3 · Summary: wickets and runs in their own aligned columns</p>
+  <p class="app-version-tag">Build 2026-10-09z4 · Match summary shows season and stage</p>
   <div class="db-indicator" id="dbIndicator"></div>
   <p class="header-blurb">An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <div class="launch-row">
@@ -6309,6 +6309,22 @@ function broadcastScorecardHtml(result, colors) {
     ${mom ? `<div style="text-align:center;color:#fff;margin-top:10px;font:600 16px Inter,sans-serif;">${mom}</div>` : ""}
   </div>`;
 }
+/** Season and stage for a match result, e.g. { season: "Season 23", stage: "Semi Finals" }.
+ * Friendlies come back as { season: null, stage: null, friendly: true }. */
+function seasonStageForResult(result) {
+  const hist = appState.matches.find(m => m.result === result);
+  const hit = m => m.fullResult === result || (hist && hist.seasonMatchId === m.id);
+  for (const season of (appState.seasons || [])) {
+    for (const g of season.groups) if (g.matches.some(hit)) return { season: season.name, stage: "Group Stage" };
+    for (const r of season.knockoutRounds) if (r.matches.some(hit)) {
+      const n = r.name || "";
+      const stage = /quarter/i.test(n) ? "Quarter Finals" : /semi/i.test(n) ? "Semi Finals" : /final/i.test(n) ? "The Final" : n;
+      return { season: season.name, stage };
+    }
+  }
+  return { season: null, stage: null, friendly: !!hist };
+}
+
 /** Broadcast-style MATCH SUMMARY graphic: both innings with the top batters
  * and the opposition's top bowlers, result and Player of the Match. Same
  * palette as the broadcast scorecard (theme background, team colours). */
@@ -6323,6 +6339,7 @@ function broadcastSummaryHtml(result, colors) {
   const cFirst = readableTeamColor(colors.firstTeamColor, "#e63946"), cSecond = readableTeamColor(colors.secondTeamColor, "#3a86ff");
   const hist = appState.matches.find(m => m.result === result);
   const ground = hist ? hist.groundName : "";
+  const ss = seasonStageForResult(result);
   const toss = result.toss ? `${result.toss.tossWinnerName} won the toss and chose to ${result.toss.decision === "bat" ? "bat" : "bowl"} first` : "";
   const mainRes = getMainResultText(result), winner = getMatchResultWinner(result);
   const res = /^Match Tied/i.test(mainRes) || !winner ? mainRes : `${winner} ${mainRes}`;
@@ -6351,7 +6368,11 @@ function broadcastSummaryHtml(result, colors) {
   return `<div style="width:1000px;padding:26px;background:radial-gradient(circle at 20% 0%, ${pitchC}, ${night} 70%);font-family:Inter,sans-serif;">
     <div style="display:flex;align-items:stretch;border-radius:10px;overflow:hidden;margin-bottom:6px;">
       <div style="flex:1;padding:12px 18px;background:${cFirst};color:${onColor(cFirst)};font:800 30px Oswald,Inter,sans-serif;">${esc(result.firstTeamName).toUpperCase()}</div>
-      <div style="padding:0 20px;display:flex;align-items:center;background:${night};color:${accent};font:800 16px Inter,sans-serif;letter-spacing:2px;">MATCH SUMMARY</div>
+      <div style="padding:6px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:${night};text-align:center;">
+        <span style="color:${accent};font:800 16px Inter,sans-serif;letter-spacing:2px;">MATCH SUMMARY</span>
+        ${ss.season ? `<span style="color:#fff;font:700 12px Inter,sans-serif;letter-spacing:1px;">${esc(ss.season).toUpperCase()}</span>` : (ss.friendly ? `<span style="color:#fff;font:700 12px Inter,sans-serif;letter-spacing:1px;">FRIENDLY</span>` : "")}
+        ${ss.stage ? `<span style="color:${accent};opacity:0.85;font:800 11px Inter,sans-serif;letter-spacing:1.5px;">${esc(ss.stage).toUpperCase()}</span>` : ""}
+      </div>
       <div style="flex:1;padding:12px 18px;background:${cSecond};color:${onColor(cSecond)};font:800 30px Oswald,Inter,sans-serif;text-align:right;">${esc(result.secondTeamName).toUpperCase()}</div>
     </div>
     <div style="background:${panelC};color:#fff;text-align:center;font:700 13px Inter,sans-serif;letter-spacing:1.5px;padding:7px;border-radius:6px;margin-bottom:16px;">${esc((ground || "MatchSim") + (toss ? " · " + toss : "")).toUpperCase()}</div>
