@@ -1048,7 +1048,7 @@
 
 <header>
   <div class="header-top"><h1>MATCH<span>SIM</span></h1></div>
-  <p class="app-version-tag">Build 2026-10-09y · Scorecard names shortened (V Kohli) so dismissals fit</p>
+  <p class="app-version-tag">Build 2026-10-09z · Broadcast match summary · "J Smith" names across scorecards</p>
   <div class="db-indicator" id="dbIndicator"></div>
   <p class="header-blurb">An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <div class="launch-row">
@@ -2189,7 +2189,7 @@ function renderBattingTable(log) {
 
 function renderFallOfWickets(fow) {
   if (fow.length === 0) return "";
-  const items = fow.map(w => `<span class="fow-chip"><b>${w.wicketNumber}-${w.score}</b> ${w.batter} <i>${w.overBall}</i></span>`).join("");
+  const items = fow.map(w => `<span class="fow-chip"><b>${w.wicketNumber}-${w.score}</b> ${shortName(w.batter)} <i>${w.overBall}</i></span>`).join("");
   return `<div class="fow"><span class="label">Fall of wickets</span><div class="fow-chips">${items}</div></div>`;
 }
 
@@ -2257,7 +2257,7 @@ function renderBowlingTable(log, timeline) {
     const economy = fullOvers > 0 ? (b.runs / fullOvers).toFixed(2) : "0.00";
     return `
     <tr>
-      <td>${b.name}</td>
+      <td title="${b.name}">${shortName(b.name)}</td>
       <td class="mono sc-num">${formatOvers(b.overs)}</td>
       <td class="mono sc-num">${b.maidens}</td>
       <td class="mono sc-num">${b.runs}</td>
@@ -5011,7 +5011,8 @@ function wireScorecardButtons() {
       if (!match || !match.fullResult) return;
       if (match.fullResult._stub) { alert("This match's full scorecard isn't in match history any more."); return; }
       const teamA = getTeam(match.team1Id), teamB = getTeam(match.team2Id);
-      openMatchSummary(match.fullResult, { firstTeamColor: teamA?.color || "#E63946", secondTeamColor: teamB?.color || "#1D3557" }, `${teamA?.name}-vs-${teamB?.name}-summary`);
+      const aFirst = match.fullResult.firstTeamName === teamA?.name;
+      openMatchSummary(match.fullResult, { firstTeamColor: (aFirst ? teamA : teamB)?.color || "#E63946", secondTeamColor: (aFirst ? teamB : teamA)?.color || "#1D3557" }, `${teamA?.name}-vs-${teamB?.name}-summary`);
     };
   });
 }
@@ -5151,12 +5152,7 @@ document.getElementById("closeScoreGraphBtn").addEventListener("click", () => {
  * card's own button alike, so there's one summary view and one download
  * path regardless of where the match came from. */
 function openMatchSummary(result, colors, filenameBase) {
-  const content = document.getElementById("matchSummaryContent");
-  content.innerHTML = renderMatchSummaryCard(result, colors);
-  document.getElementById("matchSummaryOverlay").style.display = "flex";
-  document.getElementById("downloadMatchSummaryBtn").onclick = () => {
-    downloadLandscapeSummary(result, colors, filenameBase || `${result.firstTeamName}-vs-${result.secondTeamName}-summary`);
-  };
+  openBroadcastScorecard(result, colors || {}, filenameBase || `${result.firstTeamName}-vs-${result.secondTeamName}-summary`, "summary");
 }
 document.getElementById("closeMatchSummaryBtn").addEventListener("click", () => {
   document.getElementById("matchSummaryOverlay").style.display = "none";
@@ -6216,7 +6212,7 @@ function renderSuperOverSummary(so) {
  * R · W · Econ and a fall-of-wickets strip. Built off-screen, captured, removed. */
 function broadcastScorecardHtml(result, colors) {
   const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-  const sur = n => { const p = String(n || "").trim().split(/\s+/); return (p.length > 1 ? p.slice(1).join(" ") : p[0]).toUpperCase(); };
+  const sur = n => shortName(n).toUpperCase();          // "J SMITH"
   const hist = appState.matches.find(m => m.result === result);
   const ground = hist ? hist.groundName : "";
   const cFirst = readableTeamColor(colors.firstTeamColor, "#e63946"), cSecond = readableTeamColor(colors.secondTeamColor, "#3a86ff");
@@ -6313,8 +6309,62 @@ function broadcastScorecardHtml(result, colors) {
     ${mom ? `<div style="text-align:center;color:#fff;margin-top:10px;font:600 16px Inter,sans-serif;">${mom}</div>` : ""}
   </div>`;
 }
+/** Broadcast-style MATCH SUMMARY graphic: both innings with the top batters
+ * and the opposition's top bowlers, result and Player of the Match. Same
+ * palette as the broadcast scorecard (theme background, team colours). */
+function broadcastSummaryHtml(result, colors) {
+  const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const nm = n => esc(shortName(n).toUpperCase());
+  const cssVar = (n, d) => (getComputedStyle(document.documentElement).getPropertyValue(n) || "").trim() || d;
+  const night = cssVar("--night", "#0F2C22"), panelC = cssVar("--panel", "#163A2C"), pitchC = cssVar("--pitch", "#1B4332"), accent = cssVar("--amber", "#E8A33D");
+  const ink = "#141826";
+  const onColor = hex => { const n = parseInt(String(hex).slice(1), 16); const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; return l > 0.6 ? ink : "#fff"; };
+  const hexA = (hex, a) => { const m = /^#?([0-9a-f]{6})$/i.exec(hex); if (!m) return hex; const n = parseInt(m[1], 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+  const cFirst = readableTeamColor(colors.firstTeamColor, "#e63946"), cSecond = readableTeamColor(colors.secondTeamColor, "#3a86ff");
+  const hist = appState.matches.find(m => m.result === result);
+  const ground = hist ? hist.groundName : "";
+  const toss = result.toss ? `${result.toss.tossWinnerName} won the toss and chose to ${result.toss.decision === "bat" ? "bat" : "bowl"} first` : "";
+  const mainRes = getMainResultText(result), winner = getMatchResultWinner(result);
+  const res = /^Match Tied/i.test(mainRes) || !winner ? mainRes : `${winner} ${mainRes}`;
+  const block = (inn, batName, cBat, bowlName, cBowl) => {
+    const bats = topBatters(inn.battingLog, 4);
+    const bowls = topBowlers(inn.bowlingLog, 4);
+    const row = (l, r, sub, i) => `<div style="display:flex;align-items:center;gap:10px;padding:7px 14px;${i % 2 ? "background:#f3f2f8;" : ""}">
+        <span style="flex:1;min-width:0;font:800 17px Inter,sans-serif;color:${ink};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l}</span>
+        <span style="font:800 19px 'JetBrains Mono',monospace;color:${ink};">${r}</span>
+        <span style="width:58px;text-align:right;font:600 13px 'JetBrains Mono',monospace;color:#6b6f80;">${sub}</span></div>`;
+    const batRows = bats.map((b, i) => row(nm(b.name), `${b.runs}${b.out ? "" : "*"}`, `${b.balls}`, i)).join("") || row("—", "", "", 0);
+    const bowlRows = bowls.map((b, i) => row(nm(b.name), `${b.wickets}-${b.runs}`, formatOvers(b.overs), i)).join("") || row("—", "", "", 0);
+    return `<div style="margin-bottom:18px;border-radius:10px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,0.35);">
+      <div style="display:flex;align-items:center;background:linear-gradient(90deg, ${cBat}, ${hexA(cBat, 0.8)});color:${onColor(cBat)};padding:10px 18px;">
+        <span style="flex:1;font:800 28px Oswald,Inter,sans-serif;letter-spacing:0.5px;">${esc(batName).toUpperCase()}</span>
+        <span style="font:800 34px Oswald,Inter,sans-serif;">${inn.runs}${inn.wickets < 10 ? "-" + inn.wickets : ""}</span>
+        <span style="margin-left:14px;font:700 15px Inter,sans-serif;opacity:0.85;">${formatOversFull(inn.oversUsed)} OVERS</span>
+      </div>
+      <div style="display:flex;background:#fff;">
+        <div style="flex:1;border-right:1px solid #e3e1ea;">
+          <div style="padding:6px 14px;font:800 12px Inter,sans-serif;letter-spacing:1px;color:${ink};opacity:0.6;background:#eceaf2;">BATTING · R · B</div>${batRows}</div>
+        <div style="flex:1;">
+          <div style="padding:6px 14px;font:800 12px Inter,sans-serif;letter-spacing:1px;color:${onColor(cBowl)};background:${cBowl};">${esc(bowlName).toUpperCase()} BOWLING · W-R · O</div>${bowlRows}</div>
+      </div></div>`;
+  };
+  return `<div style="width:1000px;padding:26px;background:radial-gradient(circle at 20% 0%, ${pitchC}, ${night} 70%);font-family:Inter,sans-serif;">
+    <div style="display:flex;align-items:stretch;border-radius:10px;overflow:hidden;margin-bottom:6px;">
+      <div style="flex:1;padding:12px 18px;background:${cFirst};color:${onColor(cFirst)};font:800 30px Oswald,Inter,sans-serif;">${esc(result.firstTeamName).toUpperCase()}</div>
+      <div style="padding:0 20px;display:flex;align-items:center;background:${night};color:${accent};font:800 16px Inter,sans-serif;letter-spacing:2px;">MATCH SUMMARY</div>
+      <div style="flex:1;padding:12px 18px;background:${cSecond};color:${onColor(cSecond)};font:800 30px Oswald,Inter,sans-serif;text-align:right;">${esc(result.secondTeamName).toUpperCase()}</div>
+    </div>
+    <div style="background:${panelC};color:#fff;text-align:center;font:700 13px Inter,sans-serif;letter-spacing:1.5px;padding:7px;border-radius:6px;margin-bottom:16px;">${esc((ground || "MatchSim") + (toss ? " · " + toss : "")).toUpperCase()}</div>
+    ${block(result.first, result.firstTeamName, cFirst, result.secondTeamName, cSecond)}
+    ${block(result.second, result.secondTeamName, cSecond, result.firstTeamName, cFirst)}
+    <div style="background:${accent};color:${onColor(accent)};text-align:center;border-radius:10px;padding:13px;font:800 24px Oswald,Inter,sans-serif;letter-spacing:1px;">${esc(res).toUpperCase()}</div>
+    ${result.motm ? `<div style="text-align:center;color:#fff;margin-top:10px;font:600 16px Inter,sans-serif;">Player of the Match: <b>${nm(result.motm.name)}</b> (${esc(result.motm.teamName)})</div>` : ""}
+  </div>`;
+}
+
 /** Shows the broadcast-style scorecard in a modal, scaled to the screen width. */
-function openBroadcastScorecard(result, colors, filename) {
+function openBroadcastScorecard(result, colors, filename, kind) {
+  const isSummary = kind === "summary";
   let ov = document.getElementById("broadcastOverlay");
   if (!ov) {
     ov = document.createElement("div"); ov.id = "broadcastOverlay"; ov.className = "modal-overlay";
@@ -6329,7 +6379,8 @@ function openBroadcastScorecard(result, colors, filename) {
     ov.querySelector("#bcCloseBtn").onclick = () => { ov.style.display = "none"; };
   }
   const box = ov.querySelector(".bc-scale");
-  box.innerHTML = broadcastScorecardHtml(result, colors);
+  box.innerHTML = isSummary ? broadcastSummaryHtml(result, colors) : broadcastScorecardHtml(result, colors);
+  ov.querySelector(".bc-modal-bar b").firstChild.textContent = isSummary ? "Match summary " : "Broadcast scorecard ";
   ov.style.display = "flex";
   // fit the 1000px-wide graphic to the screen
   const body = ov.querySelector(".bc-modal-body");
@@ -6348,17 +6399,17 @@ function openBroadcastScorecard(result, colors, filename) {
   requestAnimationFrame(apply);
   window.addEventListener("resize", apply, { once: true });
   body.scrollTop = 0;
-  ov.querySelector("#bcDownloadBtn").onclick = () => downloadBroadcastScorecard(result, colors, filename);
+  ov.querySelector("#bcDownloadBtn").onclick = () => downloadBroadcastScorecard(result, colors, filename, kind);
 }
 
-function downloadBroadcastScorecard(result, colors, filename) {
+function downloadBroadcastScorecard(result, colors, filename, kind) {
   if (typeof html2canvas === "undefined") {
     alert("Image export isn't available right now (html2canvas didn't load).");
     return;
   }
   const holder = document.createElement("div");
   holder.style.cssText = "position:fixed; left:-12000px; top:0;";
-  holder.innerHTML = broadcastScorecardHtml(result, colors);
+  holder.innerHTML = kind === "summary" ? broadcastSummaryHtml(result, colors) : broadcastScorecardHtml(result, colors);
   document.body.appendChild(holder);
   const target = holder.firstElementChild;
   html2canvas(target, { backgroundColor: (getComputedStyle(document.documentElement).getPropertyValue("--night") || "#0F2C22").trim(), scale: 2 }).then(canvas => {
