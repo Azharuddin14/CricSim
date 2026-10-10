@@ -1048,7 +1048,7 @@
 
 <header>
   <div class="header-top"><h1>MATCH<span>SIM</span></h1></div>
-  <p class="app-version-tag">Build 2026-10-09z4 · Match summary shows season and stage</p>
+  <p class="app-version-tag">Build 2026-10-09z5 · Broadcast graphics use exact team colours on every theme</p>
   <div class="db-indicator" id="dbIndicator"></div>
   <p class="header-blurb">An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <div class="launch-row">
@@ -6207,6 +6207,15 @@ function renderSuperOverSummary(so) {
 /** Captures the currently-active scorecard tab as a shareable PNG image —
  * temporarily hides the full ball-by-ball detail and the download button
  * itself so the exported picture is a clean scorecard, not the whole page. */
+/** A team's colour exactly as set in its team details, whatever the app theme.
+ * Looked up by name, so older matches also show a colour changed later; falls
+ * back to the colour passed in, then to a default. */
+function exactTeamColor(name, passed, fallback) {
+  const norm = c => { const m = /^#?([0-9a-f]{6})$/i.exec(String(c || "").trim()); return m ? "#" + m[1] : null; };
+  const t = (appState.teams || []).find(x => x.name === name);
+  return (t && norm(t.color)) || norm(passed) || fallback;
+}
+
 /** TV-broadcast style scorecard image (both innings): batting card with
  * fielder · bowler · R · B · 4s · 6s · SR, then bowling with O · M · dots ·
  * R · W · Econ and a fall-of-wickets strip. Built off-screen, captured, removed. */
@@ -6215,7 +6224,7 @@ function broadcastScorecardHtml(result, colors) {
   const sur = n => shortName(n).toUpperCase();          // "J SMITH"
   const hist = appState.matches.find(m => m.result === result);
   const ground = hist ? hist.groundName : "";
-  const cFirst = readableTeamColor(colors.firstTeamColor, "#e63946"), cSecond = readableTeamColor(colors.secondTeamColor, "#3a86ff");
+  const cFirst = exactTeamColor(result.firstTeamName, colors.firstTeamColor, "#e63946"), cSecond = exactTeamColor(result.secondTeamName, colors.secondTeamColor, "#3a86ff");
   // palette follows the current app theme
   const cssVar = (n, d) => (getComputedStyle(document.documentElement).getPropertyValue(n) || "").trim() || d;
   const night = cssVar("--night", "#0F2C22"), panelC = cssVar("--panel", "#163A2C"), pitchC = cssVar("--pitch", "#1B4332");
@@ -6226,9 +6235,9 @@ function broadcastScorecardHtml(result, colors) {
   const onColor = hex => { const n = parseInt(String(hex).slice(1), 16); const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; return l > 0.6 ? ink : "#fff"; };
   const header = (batName, bowlName, cBat, cBowl, label) => `
     <div style="display:flex;align-items:stretch;border-radius:10px 10px 0 0;overflow:hidden;">
-      <div style="flex:1;padding:12px 20px;font:800 30px Oswald,Inter,sans-serif;color:${onColor(cBat)};background:linear-gradient(90deg, ${cBat}, ${hexA(cBat, 0.75)});display:flex;align-items:center;gap:12px;"><span style="width:16px;height:16px;border-radius:50%;background:${onColor(cBat)};opacity:0.85;"></span>${esc(batName).toUpperCase()}</div>
+      <div style="flex:1;padding:12px 20px;font:800 30px Oswald,Inter,sans-serif;color:${onColor(cBat)};background:${cBat};display:flex;align-items:center;gap:12px;"><span style="width:16px;height:16px;border-radius:50%;background:${onColor(cBat)};opacity:0.85;"></span>${esc(batName).toUpperCase()}</div>
       <div style="padding:0 18px;display:flex;align-items:center;background:${deep};color:${accent};font:800 16px Inter,sans-serif;letter-spacing:1px;">${label}</div>
-      <div style="flex:1;padding:12px 20px;font:800 30px Oswald,Inter,sans-serif;color:${onColor(cBowl)};background:linear-gradient(90deg, ${hexA(cBowl, 0.55)}, ${hexA(cBowl, 0.8)});display:flex;align-items:center;justify-content:flex-end;gap:12px;opacity:0.92;">${esc(bowlName).toUpperCase()}<span style="width:16px;height:16px;border-radius:50%;background:${onColor(cBowl)};opacity:0.85;"></span></div>
+      <div style="flex:1;padding:12px 20px;font:800 30px Oswald,Inter,sans-serif;color:${onColor(cBowl)};background:${cBowl};display:flex;align-items:center;justify-content:flex-end;gap:12px;">${esc(bowlName).toUpperCase()}<span style="width:16px;height:16px;border-radius:50%;background:${onColor(cBowl)};opacity:0.85;"></span></div>
     </div>
     <div style="background:${panelC};color:#fff;text-align:center;font:700 14px Inter,sans-serif;letter-spacing:1.5px;padding:7px;">${esc(ground || "MATCHSIM").toUpperCase()}</div>`;
   const footer = (inn, cBat) => `
@@ -6336,7 +6345,7 @@ function broadcastSummaryHtml(result, colors) {
   const ink = "#141826";
   const onColor = hex => { const n = parseInt(String(hex).slice(1), 16); const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; return l > 0.6 ? ink : "#fff"; };
   const hexA = (hex, a) => { const m = /^#?([0-9a-f]{6})$/i.exec(hex); if (!m) return hex; const n = parseInt(m[1], 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
-  const cFirst = readableTeamColor(colors.firstTeamColor, "#e63946"), cSecond = readableTeamColor(colors.secondTeamColor, "#3a86ff");
+  const cFirst = exactTeamColor(result.firstTeamName, colors.firstTeamColor, "#e63946"), cSecond = exactTeamColor(result.secondTeamName, colors.secondTeamColor, "#3a86ff");
   const hist = appState.matches.find(m => m.result === result);
   const ground = hist ? hist.groundName : "";
   const ss = seasonStageForResult(result);
@@ -6353,7 +6362,7 @@ function broadcastSummaryHtml(result, colors) {
     const batRows = bats.map((b, i) => row(nm(b.name), `${b.runs}${b.out ? "" : `<sup style="position:absolute;left:100%;top:-3px;margin-left:1px;font:800 12px Inter,sans-serif;color:#c0392b;">*</sup>`}`, `${b.balls}`, i)).join("") || row("—", "", "", 0);
     const bowlRows = bowls.map((b, i) => row(nm(b.name), `<span style="display:inline-block;width:26px;text-align:right;">${b.wickets}</span><span style="display:inline-block;width:46px;text-align:right;">${b.runs}</span>`, formatOvers(b.overs), i)).join("") || row("—", "", "", 0);
     return `<div style="margin-bottom:18px;border-radius:10px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,0.35);">
-      <div style="display:flex;align-items:center;background:linear-gradient(90deg, ${cBat}, ${hexA(cBat, 0.8)});color:${onColor(cBat)};padding:10px 18px;">
+      <div style="display:flex;align-items:center;background:${cBat};color:${onColor(cBat)};padding:10px 18px;">
         <span style="flex:1;font:800 28px Oswald,Inter,sans-serif;letter-spacing:0.5px;">${esc(batName).toUpperCase()}</span>
         <span style="font:800 34px Oswald,Inter,sans-serif;">${inn.runs}${inn.wickets < 10 ? "-" + inn.wickets : ""}</span>
         <span style="margin-left:14px;font:700 15px Inter,sans-serif;opacity:0.85;">${formatOversFull(inn.oversUsed)} OVERS</span>
