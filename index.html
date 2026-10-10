@@ -1048,7 +1048,7 @@
 
 <header>
   <div class="header-top"><h1>MATCH<span>SIM</span></h1></div>
-  <p class="app-version-tag">Build 2026-10-09z · Broadcast match summary · "J Smith" names across scorecards</p>
+  <p class="app-version-tag">Build 2026-10-09z2 · Summary: not-out star as a small superscript so runs line up</p>
   <div class="db-indicator" id="dbIndicator"></div>
   <p class="header-blurb">An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <div class="launch-row">
@@ -6331,9 +6331,9 @@ function broadcastSummaryHtml(result, colors) {
     const bowls = topBowlers(inn.bowlingLog, 4);
     const row = (l, r, sub, i) => `<div style="display:flex;align-items:center;gap:10px;padding:7px 14px;${i % 2 ? "background:#f3f2f8;" : ""}">
         <span style="flex:1;min-width:0;font:800 17px Inter,sans-serif;color:${ink};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l}</span>
-        <span style="font:800 19px 'JetBrains Mono',monospace;color:${ink};">${r}</span>
+        <span style="position:relative;font:800 19px 'JetBrains Mono',monospace;color:${ink};">${r}</span>
         <span style="width:58px;text-align:right;font:600 13px 'JetBrains Mono',monospace;color:#6b6f80;">${sub}</span></div>`;
-    const batRows = bats.map((b, i) => row(nm(b.name), `${b.runs}${b.out ? "" : "*"}`, `${b.balls}`, i)).join("") || row("—", "", "", 0);
+    const batRows = bats.map((b, i) => row(nm(b.name), `${b.runs}${b.out ? "" : `<sup style="position:absolute;left:100%;top:-3px;margin-left:1px;font:800 12px Inter,sans-serif;color:#c0392b;">*</sup>`}`, `${b.balls}`, i)).join("") || row("—", "", "", 0);
     const bowlRows = bowls.map((b, i) => row(nm(b.name), `${b.wickets}-${b.runs}`, formatOvers(b.overs), i)).join("") || row("—", "", "", 0);
     return `<div style="margin-bottom:18px;border-radius:10px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,0.35);">
       <div style="display:flex;align-items:center;background:linear-gradient(90deg, ${cBat}, ${hexA(cBat, 0.8)});color:${onColor(cBat)};padding:10px 18px;">
