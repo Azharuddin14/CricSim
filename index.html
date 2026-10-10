@@ -1048,7 +1048,7 @@
 
 <header>
   <div class="header-top"><h1>MATCH<span>SIM</span></h1></div>
-  <p class="app-version-tag">Build 2026-10-09z2 · Summary: not-out star as a small superscript so runs line up</p>
+  <p class="app-version-tag">Build 2026-10-09z3 · Summary: wickets and runs in their own aligned columns</p>
   <div class="db-indicator" id="dbIndicator"></div>
   <p class="header-blurb">An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <div class="launch-row">
@@ -6334,7 +6334,7 @@ function broadcastSummaryHtml(result, colors) {
         <span style="position:relative;font:800 19px 'JetBrains Mono',monospace;color:${ink};">${r}</span>
         <span style="width:58px;text-align:right;font:600 13px 'JetBrains Mono',monospace;color:#6b6f80;">${sub}</span></div>`;
     const batRows = bats.map((b, i) => row(nm(b.name), `${b.runs}${b.out ? "" : `<sup style="position:absolute;left:100%;top:-3px;margin-left:1px;font:800 12px Inter,sans-serif;color:#c0392b;">*</sup>`}`, `${b.balls}`, i)).join("") || row("—", "", "", 0);
-    const bowlRows = bowls.map((b, i) => row(nm(b.name), `${b.wickets}-${b.runs}`, formatOvers(b.overs), i)).join("") || row("—", "", "", 0);
+    const bowlRows = bowls.map((b, i) => row(nm(b.name), `<span style="display:inline-block;width:26px;text-align:right;">${b.wickets}</span><span style="display:inline-block;width:46px;text-align:right;">${b.runs}</span>`, formatOvers(b.overs), i)).join("") || row("—", "", "", 0);
     return `<div style="margin-bottom:18px;border-radius:10px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,0.35);">
       <div style="display:flex;align-items:center;background:linear-gradient(90deg, ${cBat}, ${hexA(cBat, 0.8)});color:${onColor(cBat)};padding:10px 18px;">
         <span style="flex:1;font:800 28px Oswald,Inter,sans-serif;letter-spacing:0.5px;">${esc(batName).toUpperCase()}</span>
@@ -6345,7 +6345,7 @@ function broadcastSummaryHtml(result, colors) {
         <div style="flex:1;border-right:1px solid #e3e1ea;">
           <div style="padding:6px 14px;font:800 12px Inter,sans-serif;letter-spacing:1px;color:${ink};opacity:0.6;background:#eceaf2;">BATTING · R · B</div>${batRows}</div>
         <div style="flex:1;">
-          <div style="padding:6px 14px;font:800 12px Inter,sans-serif;letter-spacing:1px;color:${onColor(cBowl)};background:${cBowl};">${esc(bowlName).toUpperCase()} BOWLING · W-R · O</div>${bowlRows}</div>
+          <div style="padding:6px 14px;font:800 12px Inter,sans-serif;letter-spacing:1px;color:${onColor(cBowl)};background:${cBowl};">${esc(bowlName).toUpperCase()} BOWLING · W · R · O</div>${bowlRows}</div>
       </div></div>`;
   };
   return `<div style="width:1000px;padding:26px;background:radial-gradient(circle at 20% 0%, ${pitchC}, ${night} 70%);font-family:Inter,sans-serif;">
