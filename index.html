@@ -1041,6 +1041,22 @@
   .sc-bat-table td.sc-bat-cell { white-space: normal; overflow: visible; text-overflow: clip; max-width: none; line-height: 1.2; }
   .sc-tab-panel .sc-bat-table .sc-bat-name { white-space: nowrap; }
   .sc-tab-panel .sc-bat-table .sc-bat-how { display: inline-block; white-space: nowrap; }
+  /* Ground Stats table — small headers, numbers right-aligned, ground column pinned while scrolling sideways */
+  .gs-controls { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .gs-controls select { flex: 1 1 140px; }
+  .gs-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .gs-table { border-collapse: collapse; width: 100%; font-size: 12px; white-space: nowrap; }
+  .gs-table th { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; color: var(--cream-dim); padding: 6px 6px; text-align: right; border-bottom: 1px solid var(--line); background: var(--panel); white-space: normal; line-height: 1.15; vertical-align: bottom; min-width: 34px; }
+  .gs-table td { padding: 6px 6px; text-align: right; font-family: 'JetBrains Mono', monospace; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .gs-table tbody tr:nth-child(even) td { background: rgba(255,255,255,0.025); }
+  .gs-table .gs-name { position: sticky; left: 0; z-index: 1; text-align: left; font-family: 'Inter', sans-serif; font-weight: 600; max-width: 132px; min-width: 110px; overflow: hidden; text-overflow: ellipsis; background: var(--panel); border-right: 1px solid var(--line); }
+  .gs-table th.gs-name { z-index: 2; }
+  .gs-table td.gs-lead { color: var(--amber); font-weight: 700; }
+  .gs-table tfoot td { font-weight: 700; color: var(--cream); border-top: 1px solid var(--line); border-bottom: none; background: rgba(255,255,255,0.04); }
+  .gs-note { margin-top: 10px; font-size: 11px; }
+  /* the pinned ground column must be solid so numbers scrolling under it don't show through */
+  .gs-table tbody tr:nth-child(even) td.gs-name { background: linear-gradient(rgba(255,255,255,0.025), rgba(255,255,255,0.025)), var(--panel); }
+  .gs-table tfoot td.gs-name { background: linear-gradient(rgba(255,255,255,0.04), rgba(255,255,255,0.04)), var(--panel); }
 </style>
 
 </head>
@@ -1048,7 +1064,7 @@
 
 <header>
   <div class="header-top"><h1>MATCH<span>SIM</span></h1></div>
-  <p class="app-version-tag">Build 2026-10-09z6 · Match summary: toss coin by the team name, no column labels</p>
+  <p class="app-version-tag">Build 2026-10-12 · Ground Stats tab</p>
   <div class="db-indicator" id="dbIndicator"></div>
   <p class="header-blurb">An original, from-scratch cricket simulator — set two XIs, a pitch, and run a full 20-over match ball by ball. No proprietary data or code from any other simulator; every probability here is built in the open.</p>
   <div class="launch-row">
@@ -1066,6 +1082,7 @@
     <button class="tab-btn" data-tab="stats">Stats &amp; History</button>
     <button class="tab-btn" data-tab="records">Records</button>
     <button class="tab-btn" data-tab="grounds">Grounds</button>
+    <button class="tab-btn" data-tab="groundstats">Ground Stats</button>
     <button class="tab-btn" data-tab="battingcareer">Batting Career</button>
     <button class="tab-btn" data-tab="bowlingcareer">Bowling Career</button>
   </div>
@@ -1343,6 +1360,28 @@
       </div>
       <p class="hint-text">Built-in grounds can't be edited, but you can add your own with custom pitch conditions. Any ground here is selectable when setting up a Quick Match or a Season.</p>
       <div id="groundsList"></div>
+    </div>
+  </div>
+
+  <div id="groundstatsTab" class="tab-panel">
+    <div class="panel">
+      <div class="panel-header-row">
+        <h2>Ground Stats</h2>
+      </div>
+      <div class="gs-controls">
+        <select id="groundStatsSource"><option value="all">All matches</option><option value="season">Season matches only</option><option value="quickmatch">Friendlies only</option></select>
+        <select id="groundStatsSort">
+          <option value="m">Sort: Matches, then highest score</option>
+          <option value="chp">Sort: Chase %</option>
+          <option value="bfp">Sort: Bat 1st %</option>
+          <option value="avg">Sort: Avg 1st inns</option>
+          <option value="hs">Sort: Highest</option>
+          <option value="c200">Sort: 200+ scores</option>
+          <option value="c100">Sort: Sub-100 scores</option>
+        </select>
+      </div>
+      <div id="groundStatsTable"></div>
+      <p class="hint-text gs-note">Win % is out of decided matches (ties left out). Lowest and sub-100 count completed innings only — a 1st innings, or a chase that fell short — so a winning chase of a small target doesn't count as a low score. Archived seasons aren't included.</p>
     </div>
   </div>
 
@@ -2722,11 +2761,14 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     if (btn.dataset.tab === "stats") renderStatsTab();
     if (btn.dataset.tab === "records") renderRecordsTab();
     if (btn.dataset.tab === "grounds") renderGroundsTab();
+    if (btn.dataset.tab === "groundstats") renderGroundStatsTab();
     if (btn.dataset.tab === "battingcareer") renderBattingCareerTab();
     if (btn.dataset.tab === "bowlingcareer") renderBowlingCareerTab();
   });
 });
 document.getElementById("recordsSourceFilter").addEventListener("change", () => renderRecordsTab());
+document.getElementById("groundStatsSource").addEventListener("change", () => renderGroundStatsTab());
+document.getElementById("groundStatsSort").addEventListener("change", () => renderGroundStatsTab());
 document.getElementById("battingCareerSort").addEventListener("change", () => renderBattingCareerTab());
 document.getElementById("bowlingCareerSort").addEventListener("change", () => renderBowlingCareerTab());
 document.getElementById("battingCareerSearchInput").addEventListener("input", () => renderBattingCareerTab());
@@ -2990,6 +3032,70 @@ document.getElementById("playerSearchInput").addEventListener("input", () => ren
 // ============================================================
 // Grounds tab
 // ============================================================
+/** Per-ground table: matches, bat-first vs chase wins and %, average 1st-innings
+ * score, highest / lowest totals, and how many 200+ and sub-100 totals. */
+function renderGroundStatsTab() {
+  const box = document.getElementById("groundStatsTable");
+  if (!box) return;
+  const src = document.getElementById("groundStatsSource").value;
+  const sortKey = document.getElementById("groundStatsSort").value;
+  const pool = statsMatches().filter(m => src === "all" || (m.source || "quickmatch") === src);
+  const G = new Map();
+  const fmt = (inn) => `${inn.runs}${inn.wickets >= 10 ? "" : "/" + inn.wickets}`;
+  pool.forEach(m => {
+    const r = m.result; if (!r || !r.first || !r.second) return;
+    const name = (m.groundName && m.groundName !== "Custom") ? m.groundName : "Custom pitch";
+    if (!G.has(name)) G.set(name, { name, m: 0, bf: 0, ch: 0, firstSum: 0, hs: null, ls: null, c200: 0, c100: 0 });
+    const g = G.get(name);
+    g.m++;
+    const w = getMatchResultWinner(r);
+    if (w && w === r.firstTeamName) g.bf++;
+    else if (w && w === r.secondTeamName) g.ch++;
+    g.firstSum += r.first.runs;
+    const chaseWon = w === r.secondTeamName;
+    const innings = [
+      { inn: r.first, team: r.firstTeamName, opp: r.secondTeamName, complete: true },
+      { inn: r.second, team: r.secondTeamName, opp: r.firstTeamName, complete: !chaseWon },
+    ];
+    innings.forEach(({ inn, team, opp, complete }) => {
+      if (inn.runs >= 200) g.c200++;
+      if (!g.hs || inn.runs > g.hs.runs) g.hs = { runs: inn.runs, txt: fmt(inn), who: `${team} vs ${opp}` };
+      if (complete) {
+        if (inn.runs < 100) g.c100++;
+        if (!g.ls || inn.runs < g.ls.runs) g.ls = { runs: inn.runs, txt: fmt(inn), who: `${team} vs ${opp}` };
+      }
+    });
+  });
+  const rows = [...G.values()].map(g => {
+    const dec = g.bf + g.ch;
+    return { ...g, avg: g.m ? g.firstSum / g.m : 0, bfp: dec ? g.bf * 100 / dec : -1, chp: dec ? g.ch * 100 / dec : -1 };
+  });
+  const key = { m: x => x.m, chp: x => x.chp, bfp: x => x.bfp, avg: x => x.avg, hs: x => x.hs ? x.hs.runs : 0, c200: x => x.c200, c100: x => x.c100 }[sortKey] || (x => x.m);
+  const hsOf = x => x.hs ? x.hs.runs : 0;
+  // ties: more matches first, then the higher top score
+  rows.sort((a, b) => key(b) - key(a) || b.m - a.m || hsOf(b) - hsOf(a) || a.name.localeCompare(b.name));
+  if (!rows.length) { box.innerHTML = `<p class="ps-empty">No matches played yet.</p>`; return; }
+  const pct = v => v < 0 ? "—" : `${Math.round(v)}%`;
+  const esc = t => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  const body = rows.map(g => `<tr>
+      <td class="gs-name" title="${esc(g.name)}">${esc(g.name)}</td>
+      <td>${g.m}</td><td>${g.bf}</td><td>${g.ch}</td>
+      <td class="${g.chp > g.bfp ? "gs-lead" : ""}">${pct(g.chp)}</td><td class="${g.bfp > g.chp ? "gs-lead" : ""}">${pct(g.bfp)}</td>
+      <td>${Math.round(g.avg)}</td>
+      <td title="${g.hs ? esc(g.hs.who) : ""}">${g.hs ? g.hs.txt : "—"}</td>
+      <td title="${g.ls ? esc(g.ls.who) : ""}">${g.ls ? g.ls.txt : "—"}</td>
+      <td>${g.c200}</td><td>${g.c100}</td></tr>`).join("");
+  const T = rows.reduce((t, g) => ({ m: t.m + g.m, bf: t.bf + g.bf, ch: t.ch + g.ch, fs: t.fs + g.firstSum, c200: t.c200 + g.c200, c100: t.c100 + g.c100,
+    hs: (!t.hs || (g.hs && g.hs.runs > t.hs.runs)) ? g.hs : t.hs, ls: (!t.ls || (g.ls && g.ls.runs < t.ls.runs)) ? g.ls : t.ls }), { m: 0, bf: 0, ch: 0, fs: 0, c200: 0, c100: 0, hs: null, ls: null });
+  const tdec = T.bf + T.ch;
+  box.innerHTML = `<div class="gs-scroll"><table class="gs-table">
+    <thead><tr><th class="gs-name">Ground</th><th>M</th><th>Bat 1st W</th><th>Chase W</th><th>Chase %</th><th>Bat 1st %</th><th>Avg 1st inns</th><th>Highest</th><th>Lowest</th><th>200+</th><th>&lt;100</th></tr></thead>
+    <tbody>${body}</tbody>
+    <tfoot><tr><td class="gs-name">All grounds</td><td>${T.m}</td><td>${T.bf}</td><td>${T.ch}</td><td>${pct(tdec ? T.ch * 100 / tdec : -1)}</td><td>${pct(tdec ? T.bf * 100 / tdec : -1)}</td>
+      <td>${T.m ? Math.round(T.fs / T.m) : 0}</td><td>${T.hs ? T.hs.txt : "—"}</td><td>${T.ls ? T.ls.txt : "—"}</td><td>${T.c200}</td><td>${T.c100}</td></tr></tfoot>
+  </table></div>`;
+}
+
 function renderGroundsTab() {
   persistState();
   const list = document.getElementById("groundsList");
